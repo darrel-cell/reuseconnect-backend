@@ -1,0 +1,276 @@
+// Script to clean up database and seed with admin company, admin user, and asset categories
+import prisma from './src/config/database';
+import { hashPassword } from './src/utils/password';
+
+async function cleanupDatabase() {
+  console.log('🧹 Starting database cleanup...\n');
+
+  try {
+    // Find Reuse ITAD Platform tenant
+    const reuseTenant = await prisma.tenant.findFirst({
+      where: {
+        OR: [
+          { name: 'Reuse ITAD Platform' },
+          { slug: 'reuse' },
+        ],
+      },
+    });
+
+    let reuseTenantId: string;
+    
+    if (!reuseTenant) {
+      console.log('⚠️  Reuse ITAD Platform tenant not found. Creating it...');
+      const newTenant = await prisma.tenant.create({
+        data: {
+          name: 'Reuse ITAD Platform',
+          slug: 'reuse',
+          primaryColor: '168, 70%, 35%',
+          accentColor: '168, 60%, 45%',
+          theme: 'auto',
+        },
+      });
+      reuseTenantId = newTenant.id;
+      console.log('✅ Created Reuse ITAD Platform tenant\n');
+    } else {
+      reuseTenantId = reuseTenant.id;
+      console.log(`✅ Found Reuse ITAD Platform tenant: ${reuseTenant.name} (${reuseTenantId})\n`);
+    }
+
+    // Step 1: Delete all bookings (this will cascade delete BookingAsset, BookingStatusHistory)
+    console.log('📦 Deleting all bookings...');
+    const deletedBookings = await prisma.booking.deleteMany({});
+    console.log(`   ✅ Deleted ${deletedBookings.count} bookings\n`);
+
+    // Step 2: Delete all jobs (this will cascade delete JobAsset, JobStatusHistory, Evidence, CO2Result, etc.)
+    console.log('💼 Deleting all jobs...');
+    const deletedJobs = await prisma.job.deleteMany({});
+    console.log(`   ✅ Deleted ${deletedJobs.count} jobs\n`);
+
+    // Step 3: Delete all driver profiles (before deleting users)
+    console.log('🚗 Deleting all driver profiles...');
+    const deletedDriverProfiles = await prisma.driverProfile.deleteMany({});
+    console.log(`   ✅ Deleted ${deletedDriverProfiles.count} driver profiles\n`);
+
+    // Step 4: Delete all sites
+    console.log('📍 Deleting all sites...');
+    const deletedSites = await prisma.site.deleteMany({});
+    console.log(`   ✅ Deleted ${deletedSites.count} sites\n`);
+
+    // Step 5: Delete all invoices (related to clients)
+    console.log('🧾 Deleting all invoices...');
+    const deletedInvoices = await prisma.invoice.deleteMany({});
+    console.log(`   ✅ Deleted ${deletedInvoices.count} invoices\n`);
+
+    // Step 6: Delete all commissions (related to clients/resellers)
+    console.log('💰 Deleting all commissions...');
+    const deletedCommissions = await prisma.commission.deleteMany({});
+    console.log(`   ✅ Deleted ${deletedCommissions.count} commissions\n`);
+
+    // Step 7: Delete all clients
+    console.log('👥 Deleting all clients...');
+    const deletedClients = await prisma.client.deleteMany({});
+    console.log(`   ✅ Deleted ${deletedClients.count} clients\n`);
+
+    // Step 8: Delete all documents (except those belonging to Reuse ITAD Platform)
+    console.log('📄 Deleting documents from other tenants...');
+    const deletedDocuments = await prisma.document.deleteMany({
+      where: {
+        tenantId: { not: reuseTenantId },
+      },
+    });
+    console.log(`   ✅ Deleted ${deletedDocuments.count} documents from other tenants\n`);
+
+    // Step 9: Delete all invites (delete all invites, we'll keep only admins)
+    console.log('✉️  Deleting all invites...');
+    const deletedInvites = await prisma.invite.deleteMany({});
+    console.log(`   ✅ Deleted ${deletedInvites.count} invites\n`);
+
+    // Step 10: Delete all non-admin users (resellers, clients, drivers)
+    // But keep admin users (they might be in any tenant, but we'll keep them)
+    console.log('👤 Deleting non-admin users (resellers, clients, drivers)...');
+    const deletedUsers = await prisma.user.deleteMany({
+      where: {
+        role: { in: ['reseller', 'client', 'driver'] },
+      },
+    });
+    console.log(`   ✅ Deleted ${deletedUsers.count} non-admin users\n`);
+
+    // Step 11: Delete all tenants except Reuse ITAD Platform
+    console.log('🏢 Deleting all tenants except Reuse ITAD Platform...');
+    const deletedTenants = await prisma.tenant.deleteMany({
+      where: {
+        id: { not: reuseTenantId },
+      },
+    });
+    console.log(`   ✅ Deleted ${deletedTenants.count} tenants\n`);
+
+    // Step 12: Delete all admin users (we'll recreate them)
+    console.log('👤 Deleting all admin users...');
+    const deletedAdmins = await prisma.user.deleteMany({
+      where: {
+        role: 'admin',
+      },
+    });
+    console.log(`   ✅ Deleted ${deletedAdmins.count} admin users\n`);
+
+    // Step 13: Delete all asset categories (we'll recreate them)
+    console.log('📦 Deleting all asset categories...');
+    const deletedCategories = await prisma.assetCategory.deleteMany({});
+    console.log(`   ✅ Deleted ${deletedCategories.count} asset categories\n`);
+
+    // Step 14: Delete all asset categories from other tenants (if any exist)
+    // Categories are now global, but we're cleaning everything
+
+    // Step 15: Ensure Reuse ITAD Platform tenant exists and is properly configured
+    console.log('🏢 Ensuring Reuse ITAD Platform tenant exists...');
+    const finalTenant = await prisma.tenant.upsert({
+      where: { id: reuseTenantId },
+      update: {
+        name: 'Reuse ITAD Platform',
+        slug: 'reuse',
+        primaryColor: '168, 70%, 35%',
+        accentColor: '168, 60%, 45%',
+        theme: 'auto',
+      },
+      create: {
+        name: 'Reuse ITAD Platform',
+        slug: 'reuse',
+        primaryColor: '168, 70%, 35%',
+        accentColor: '168, 60%, 45%',
+        theme: 'auto',
+      },
+    });
+    console.log(`   ✅ Reuse ITAD Platform tenant ready: ${finalTenant.name} (${finalTenant.id})\n`);
+
+    // Step 16: Create admin user
+    console.log('👤 Creating admin user...');
+    const adminEmail = 'admin@reuse.com';
+    const adminPassword = 'admin123';
+    const adminName = 'Admin User';
+    
+    const hashedPassword = await hashPassword(adminPassword);
+    
+    const admin = await prisma.user.upsert({
+      where: { email: adminEmail },
+      update: {
+        name: adminName,
+        password: hashedPassword,
+        role: 'admin',
+        status: 'active',
+        tenantId: finalTenant.id,
+      },
+      create: {
+        email: adminEmail,
+        name: adminName,
+        password: hashedPassword,
+        role: 'admin',
+        status: 'active',
+        tenantId: finalTenant.id,
+      },
+    });
+    console.log(`   ✅ Admin user created/updated:`);
+    console.log(`      ID: ${admin.id}`);
+    console.log(`      Email: ${admin.email}`);
+    console.log(`      Password: ${adminPassword}`);
+    console.log(`      Name: ${admin.name}\n`);
+
+    // Step 17: Create 7 asset categories
+    console.log('📦 Creating asset categories...');
+    const categories = [
+      {
+        name: 'Networking',
+        icon: '📡',
+        co2ePerUnit: 100,
+        avgWeight: 1.0,
+        avgBuybackValue: 45,
+      },
+      {
+        name: 'Server',
+        icon: '🖥️',
+        co2ePerUnit: 500,
+        avgWeight: 20.0,
+        avgBuybackValue: 300,
+      },
+      {
+        name: 'Storage',
+        icon: '💾',
+        co2ePerUnit: 200,
+        avgWeight: 2.0,
+        avgBuybackValue: 100,
+      },
+      {
+        name: 'Laptop',
+        icon: '💻',
+        co2ePerUnit: 250,
+        avgWeight: 2.5,
+        avgBuybackValue: 150,
+      },
+      {
+        name: 'Desktop',
+        icon: '🖥️',
+        co2ePerUnit: 300,
+        avgWeight: 8.0,
+        avgBuybackValue: 80,
+      },
+      {
+        name: 'Smart Phones',
+        icon: '📱',
+        co2ePerUnit: 60,
+        avgWeight: 0.2,
+        avgBuybackValue: 30,
+      },
+      {
+        name: 'Tablets',
+        icon: '📱',
+        co2ePerUnit: 80,
+        avgWeight: 0.5,
+        avgBuybackValue: 50,
+      },
+    ];
+
+    let createdCategories = 0;
+    for (const category of categories) {
+      await prisma.assetCategory.upsert({
+        where: { name: category.name },
+        update: category,
+        create: category,
+      });
+      createdCategories++;
+    }
+    console.log(`   ✅ Created/updated ${createdCategories} asset categories\n`);
+
+    // Summary
+    console.log('📊 Cleanup & Seed Summary:');
+    console.log(`   - Bookings deleted: ${deletedBookings.count}`);
+    console.log(`   - Jobs deleted: ${deletedJobs.count}`);
+    console.log(`   - Driver profiles deleted: ${deletedDriverProfiles.count}`);
+    console.log(`   - Sites deleted: ${deletedSites.count}`);
+    console.log(`   - Invoices deleted: ${deletedInvoices.count}`);
+    console.log(`   - Commissions deleted: ${deletedCommissions.count}`);
+    console.log(`   - Clients deleted: ${deletedClients.count}`);
+    console.log(`   - Documents deleted: ${deletedDocuments.count}`);
+    console.log(`   - Invites deleted: ${deletedInvites.count}`);
+    console.log(`   - Non-admin users deleted: ${deletedUsers.count}`);
+    console.log(`   - Admin users deleted: ${deletedAdmins.count}`);
+    console.log(`   - Tenants deleted: ${deletedTenants.count}`);
+    console.log(`   - Asset categories deleted: ${deletedCategories.count}`);
+    console.log(`\n🌱 Seeded Data:`);
+    console.log(`   - Admin company: Reuse ITAD Platform`);
+    console.log(`   - Admin user: ${adminEmail} / ${adminPassword}`);
+    console.log(`   - Asset categories: ${createdCategories} items`);
+    console.log('\n✅ Database cleanup and seeding completed successfully!\n');
+
+  } catch (error) {
+    console.error('❌ Error during cleanup:', error);
+    throw error;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+// Run cleanup
+cleanupDatabase().catch((error) => {
+  console.error('❌ Failed to cleanup database:', error);
+  process.exit(1);
+});
+

@@ -1,0 +1,563 @@
+// Prisma Schema for ITAD Platform
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Users and Authentication
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String   // Hashed password
+  role      UserRole
+  status    UserStatus @default(pending)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  avatar    String?
+  phone     String?  // Phone number for drivers
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bookingsCreated Booking[] @relation("CreatedBy")
+  bookingsScheduled Booking[] @relation("ScheduledBy")
+  jobsAssigned    Job[]
+  evidence        Evidence[]
+  documents       Document[]
+  invitesSent     Invite[] @relation("InvitedBy")
+  driverProfile   DriverProfile?
+
+  @@index([email])
+  @@index([tenantId])
+  @@index([role])
+}
+
+enum UserRole {
+  admin
+  client
+  reseller
+  driver
+}
+
+enum UserStatus {
+  pending
+  active
+  inactive
+}
+
+// Tenant (Company/Brand) - Single company, one brand
+model Tenant {
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  logo         String?
+  favicon      String?
+  primaryColor String?
+  accentColor  String?
+  theme        String?  @default("auto")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  users       User[]
+  clients     Client[]
+  bookings    Booking[]
+  jobs        Job[]
+  sites       Site[]
+  documents   Document[]
+
+  @@index([slug])
+}
+
+// Clients (for reseller relationship)
+model Client {
+  id                String   @id @default(uuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  name              String
+  email             String?
+  phone             String?
+  organisationName  String?  // Organisation/company name
+  registrationNumber String? // Company registration number
+  address           String?  // Registered address
+  status            ClientStatus @default(active)
+  resellerId        String?  // If client belongs to a reseller
+  resellerName      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  bookings   Booking[]
+  sites      Site[]
+  invoices   Invoice[]
+  commissions Commission[]
+
+  @@index([tenantId])
+  @@index([resellerId])
+}
+
+enum ClientStatus {
+  active
+  inactive
+  pending
+}
+
+// Sites (Collection locations)
+model Site {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  name        String
+  address     String
+  postcode    String
+  lat         Float?
+  lng         Float?
+  contactName String?
+  contactPhone String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  bookings    Booking[]
+
+  @@index([clientId])
+  @@index([tenantId])
+}
+
+// Asset Categories (Global - shared by all tenants)
+model AssetCategory {
+  id             String   @id @default(uuid())
+  name           String   @unique // Global categories - names must be unique
+  icon           String?
+  co2ePerUnit    Float    // kg CO2e saved per unit reused
+  avgWeight      Float    // kg
+  avgBuybackValue Float   // £
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  bookingAssets  BookingAsset[]
+  jobAssets      JobAsset[]
+}
+
+// Bookings (Initial booking request)
+model Booking {
+  id                String   @id @default(uuid())
+  bookingNumber     String   @unique
+  clientId          String
+  client            Client   @relation(fields: [clientId], references: [id])
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  siteId            String?
+  site              Site?    @relation(fields: [siteId], references: [id])
+  siteName          String
+  siteAddress       String
+  postcode          String
+  lat               Float?
+  lng               Float?
+  scheduledDate     DateTime
+  status            BookingStatus @default(created)
+  charityPercent    Int      @default(0)
+  estimatedCO2e     Float
+  estimatedBuyback  Float
+  preferredVehicleType String? // petrol, diesel, electric
+  roundTripDistanceKm Float?
+  roundTripDistanceMiles Float?
+  erpJobNumber      String?  // From Mock ERP
+  jobId             String?  @unique // Link to Job when driver assigned
+  job               Job?      @relation("BookingJob")
+  resellerId        String?
+  resellerName      String?
+  createdBy         String
+  creator           User     @relation("CreatedBy", fields: [createdBy], references: [id])
+  scheduledBy       String?
+  scheduler         User?    @relation("ScheduledBy", fields: [scheduledBy], references: [id])
+  driverId          String?
+  driverName        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  scheduledAt       DateTime?
+  collectedAt       DateTime?
+  sanitisedAt       DateTime?
+  gradedAt          DateTime?
+  completedAt       DateTime?
+
+  // Relations
+  assets            BookingAsset[]
+  statusHistory     BookingStatusHistory[]
+  documents         Document[] @relation("BookingDocuments")
+  invoices          Invoice[]
+  commissions       Commission[]
+
+  @@index([clientId])
+  @@index([tenantId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([erpJobNumber])
+}
+
+enum BookingStatus {
+  created
+  scheduled
+  collected
+  sanitised
+  graded
+  completed
+  cancelled
+}
+
+// Booking Assets
+model BookingAsset {
+  id          String   @id @default(uuid())
+  bookingId  String
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   AssetCategory @relation(fields: [categoryId], references: [id])
+  categoryName String
+  quantity   Int
+  createdAt  DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([categoryId])
+}
+
+// Booking Status History
+model BookingStatusHistory {
+  id          String   @id @default(uuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  status      BookingStatus
+  changedBy   String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([createdAt])
+}
+
+// Jobs (Workflow execution)
+model Job {
+  id              String   @id @default(uuid())
+  erpJobNumber    String   @unique
+  bookingId       String?  @unique
+  booking         Booking? @relation("BookingJob", fields: [bookingId], references: [id])
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  clientName      String
+  siteName        String
+  siteAddress     String
+  status          JobStatus @default(booked)
+  scheduledDate   DateTime
+  completedDate   DateTime?
+  co2eSaved       Float    @default(0)
+  travelEmissions Float   @default(0)
+  buybackValue    Float   @default(0)
+  charityPercent  Int      @default(0)
+  driverId        String?
+  driver          User?    @relation(fields: [driverId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  assets          JobAsset[]
+  statusHistory   JobStatusHistory[]
+  evidence        Evidence[] // Multiple evidence records (one per status)
+  certificates    Certificate[]
+  co2Results      CO2Result[]
+  buybackResults  BuybackResult[]
+  financeStatus   FinanceStatus?
+
+  @@index([bookingId])
+  @@index([tenantId])
+  @@index([status])
+  @@index([driverId])
+  @@index([scheduledDate])
+  @@index([erpJobNumber])
+}
+
+enum JobStatus {
+  booked
+  routed
+  en_route
+  arrived
+  collected
+  warehouse
+  sanitised
+  graded
+  completed
+  cancelled
+}
+
+// Job Assets
+model JobAsset {
+  id                  String   @id @default(uuid())
+  jobId               String
+  job                 Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  categoryId          String
+  category            AssetCategory @relation(fields: [categoryId], references: [id])
+  categoryName        String
+  quantity            Int
+  serialNumbers       String[] @default([])
+  grade               String?  // A, B, C, D, Recycled
+  weight              Float?
+  sanitised           Boolean  @default(false)
+  wipeMethod          String?
+  sanitisationRecordId String?
+  gradingRecordId     String?
+  resaleValue         Float?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([jobId])
+  @@index([categoryId])
+}
+
+// Job Status History
+model JobStatusHistory {
+  id          String   @id @default(uuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status      JobStatus
+  changedBy   String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([jobId])
+  @@index([createdAt])
+}
+
+// Driver Profile (Vehicle information for drivers)
+model DriverProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleReg      String   // Vehicle registration number
+  vehicleType     String   // 'van' | 'truck' | 'car'
+  vehicleFuelType String   // 'petrol' | 'diesel' | 'electric'
+  phone           String?  // Driver phone number
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Evidence (Driver uploads)
+// Evidence is immutable once submitted - cannot be edited or deleted
+// Each status transition requires separate evidence submission
+// uploadedBy can be null if driver account is deleted (evidence is preserved for audit)
+model Evidence {
+  id          String    @id @default(uuid())
+  jobId       String
+  job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status      JobStatus // Status for which this evidence was submitted
+  uploadedBy  String?   // Nullable to preserve evidence when driver is deleted
+  uploader    User?      @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+  photos      String[]  @default([]) // File paths/URLs
+  signature   String?   // File path/URL
+  sealNumbers String[]  @default([])
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([jobId, status]) // One evidence record per job per status
+  @@index([jobId])
+  @@index([status])
+  @@index([uploadedBy])
+}
+
+// Certificates
+model Certificate {
+  id            String   @id @default(uuid())
+  jobId         String
+  job           Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  type          CertificateType
+  generatedDate DateTime @default(now())
+  downloadUrl   String
+  externalUrl   String?  // For Blancco certificates
+  createdAt     DateTime @default(now())
+
+  @@index([jobId])
+  @@index([type])
+}
+
+enum CertificateType {
+  chain_of_custody
+  data_wipe
+  destruction
+  recycling
+  esg_report
+}
+
+// CO2 Results
+model CO2Result {
+  id              String   @id @default(uuid())
+  jobId           String   @unique
+  job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  reuseSavings    Float    // kg CO2e
+  travelEmissions Float    // kg CO2e
+  netImpact       Float    // kg CO2e
+  distanceKm      Float
+  distanceMiles   Float
+  vehicleEmissionsPetrol   Float
+  vehicleEmissionsDiesel   Float
+  vehicleEmissionsElectric  Float
+  treesPlanted    Int
+  householdDays   Int
+  carMiles        Int
+  flightHours     Int
+  calculationType String   @default("pre_job") // pre_job or post_job
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([jobId])
+}
+
+// Buyback Results
+model BuybackResult {
+  id              String   @id @default(uuid())
+  jobId           String   @unique
+  job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  estimatedValue  Float
+  finalValue      Float?
+  erpValue        Float?   // From ERP
+  calculationType String   @default("pre_job") // pre_job or post_job
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([jobId])
+}
+
+// Finance Status (ERP-owned, we just track)
+model FinanceStatus {
+  id              String   @id @default(uuid())
+  jobId           String   @unique
+  job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  estimatedCost   Float?
+  estimatedBuyback Float?
+  finalCost       Float?
+  finalBuyback    Float?
+  erpInvoiceRef   String?
+  erpInvoiceUrl   String?
+  status          String   @default("pending") // pending, invoiced, paid
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([jobId])
+}
+
+// Documents (Manual PDF uploads)
+model Document {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  jobId       String?
+  bookingId   String?
+  booking     Booking? @relation("BookingDocuments", fields: [bookingId], references: [id])
+  name        String
+  type        String   // invoice, certificate, report, etc.
+  filePath    String
+  fileSize    Int
+  mimeType    String
+  uploadedBy  String
+  uploader    User     @relation(fields: [uploadedBy], references: [id])
+  metadata    String?  // JSON metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([jobId])
+  @@index([bookingId])
+}
+
+// Invites
+model Invite {
+  id          String   @id @default(uuid())
+  email       String
+  role        UserRole
+  tenantId    String
+  tenantName  String
+  invitedBy   String
+  inviter     User     @relation("InvitedBy", fields: [invitedBy], references: [id])
+  invitedAt   DateTime @default(now())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  token       String   @unique
+
+  @@index([email])
+  @@index([token])
+  @@index([tenantId])
+}
+
+// Invoices (ERP-owned, we track status)
+model Invoice {
+  id            String   @id @default(uuid())
+  invoiceNumber String   @unique
+  clientId      String
+  client        Client   @relation(fields: [clientId], references: [id])
+  bookingId     String?
+  booking       Booking? @relation(fields: [bookingId], references: [id])
+  jobId         String?
+  erpJobNumber  String?
+  issueDate     DateTime
+  dueDate       DateTime
+  amount        Float
+  status        InvoiceStatus @default(draft)
+  items         String   // JSON array of invoice items
+  subtotal      Float
+  tax           Float
+  total         Float
+  downloadUrl   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([bookingId])
+  @@index([status])
+}
+
+enum InvoiceStatus {
+  draft
+  sent
+  paid
+  overdue
+  cancelled
+}
+
+// Commissions (for resellers)
+model Commission {
+  id              String   @id @default(uuid())
+  resellerId      String
+  resellerName    String
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id])
+  bookingId       String?
+  booking         Booking? @relation(fields: [bookingId], references: [id])
+  jobId           String?
+  jobNumber       String?
+  bookingNumber   String?
+  commissionPercent Int
+  jobValue        Float
+  commissionAmount Float
+  status          CommissionStatus @default(pending)
+  period          String   // YYYY-MM
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([resellerId])
+  @@index([clientId])
+  @@index([status])
+  @@index([period])
+}
+
+enum CommissionStatus {
+  pending
+  approved
+  paid
+}
