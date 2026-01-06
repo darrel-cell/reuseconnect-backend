@@ -1,11 +1,13 @@
 // Booking Service
 
 import { BookingRepository } from '../repositories/booking.repository';
+import { JobRepository } from '../repositories/job.repository';
 import { CO2Service } from './co2.service';
 import { mockERPService } from './mock-erp.service';
-import { isValidBookingTransition } from '../middleware/workflow';
+import { isValidBookingTransition, isValidJobTransition } from '../middleware/workflow';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors';
-import { BookingStatus } from '../types';
+import { BookingStatus, JobStatus } from '../types';
+import { calculateTravelEmissions } from '../utils/co2';
 import { config } from '../config/env';
 import prisma from '../config/database';
 
@@ -84,17 +86,36 @@ export class BookingService {
         actualClientId = newClient.id;
       }
     } else {
-      // No clientId provided, find or create client for tenantId
-      let client = await prisma.client.findFirst({
-        where: { tenantId: data.tenantId },
+      // No clientId provided - this is typically a client user creating a booking.
+      // We MUST link the booking to a Client record that belongs specifically to this user,
+      // not just \"any\" client in the tenant, otherwise bookings from different client users
+      // (e.g. Alex vs Carlos) can appear under the wrong client name.
+
+      // Look up the user to get their email and name
+      const user = await prisma.user.findUnique({
+        where: { id: data.createdBy },
+        select: { email: true, name: true },
       });
-      
+
+      let client = null;
+
+      if (user?.email) {
+        // Try to find an existing Client record for this user's email within the tenant
+        client = await prisma.client.findFirst({
+          where: {
+            tenantId: data.tenantId,
+            email: user.email,
+          },
+        });
+      }
+
       if (!client) {
-        // Create client for this tenant
+        // No client record exists for this user/email - create one
         client = await prisma.client.create({
           data: {
             tenantId: data.tenantId,
-            name: data.clientName || 'Client',
+            name: data.clientName || user?.name || 'Client',
+            email: user?.email,
             status: 'active',
             resellerId: data.resellerId,
             resellerName: data.resellerName,
@@ -110,7 +131,7 @@ export class BookingService {
           },
         });
       }
-      
+
       actualClientId = client.id;
     }
 
@@ -131,13 +152,16 @@ export class BookingService {
       lat: data.lat,
       lng: data.lng,
       scheduledDate: data.scheduledDate,
-      status: 'created',
+      status: 'pending',
       charityPercent: data.charityPercent || 0,
       estimatedCO2e: co2Result.reuseSavings,
       estimatedBuyback: co2Result.estimatedBuyback,
       preferredVehicleType: data.preferredVehicleType,
       roundTripDistanceKm: co2Result.distanceKm,
       roundTripDistanceMiles: co2Result.distanceMiles,
+      // Link booking to reseller if provided. If not provided here, the Client record
+      // (linked via clientId) may still carry resellerId/resellerName, which we'll use
+      // for notifications and reporting.
       resellerId: data.resellerId,
       resellerName: data.resellerName,
       createdBy: data.createdBy,
@@ -161,9 +185,78 @@ export class BookingService {
 
     // Add status history
     await bookingRepo.addStatusHistory(booking.id, {
-      status: 'created',
+      status: 'pending',
       changedBy: data.createdBy,
     });
+
+    // Resolve the actual client user (invited client) if one exists, based on the Client record's email.
+    // This ensures notifications go to the end client, even when a reseller created the booking.
+    const clientUser = booking.client?.email
+      ? await prisma.user.findFirst({
+          where: {
+            tenantId: data.tenantId,
+            email: booking.client.email,
+            role: 'client',
+          },
+        })
+      : null;
+    const clientUserId = clientUser?.id || data.createdBy;
+
+    // Notify client of booking creation (pending approval)
+    const { createNotification } = await import('../utils/notifications');
+    console.log('[Booking Service] Creating notification for user:', {
+      userId: clientUserId,
+      tenantId: data.tenantId,
+      bookingId: booking.id,
+      bookingNumber: booking.bookingNumber,
+    });
+    await createNotification(
+      clientUserId,
+      data.tenantId,
+      'info',
+      'Booking submitted',
+      `Your booking ${booking.bookingNumber} has been submitted and is pending admin approval`,
+      `/bookings/${booking.id}`,
+      booking.id,
+      'booking'
+    );
+    console.log('[Booking Service] Notification created successfully');
+
+    // If booking is linked to a reseller (and the reseller is not the creator),
+    // notify the reseller that a new booking has been submitted for their client.
+    // Derive reseller userId from either booking.resellerId or the linked client.resellerId
+    const resellerUserId = booking.resellerId || booking.client?.resellerId;
+    if (resellerUserId && resellerUserId !== data.createdBy) {
+      await createNotification(
+        resellerUserId,
+        data.tenantId,
+        'info',
+        'Client booking submitted',
+        `A new booking ${booking.bookingNumber} has been submitted for your client`,
+        `/bookings/${booking.id}`,
+        booking.id,
+        'booking'
+      );
+    }
+
+    // Notify admins of new booking requiring approval
+    const adminUsers = await prisma.user.findMany({
+      where: {
+        tenantId: data.tenantId,
+        role: 'admin',
+        status: 'active',
+      },
+      select: { id: true },
+    });
+    if (adminUsers.length > 0) {
+      const { notifyPendingApproval } = await import('../utils/notifications');
+      await notifyPendingApproval(
+        booking.id,
+        booking.bookingNumber,
+        adminUsers.map(u => u.id),
+        data.tenantId
+      );
+    }
 
     // Call Mock ERP to get job number
     if (config.erp.mockEnabled) {
@@ -224,41 +317,13 @@ export class BookingService {
         offset: filters.offset,
       });
     } else if (filters.userRole === 'client') {
-      // Clients see bookings for their Client record(s)
-      // First, find the Client record(s) associated with this user (by email and tenantId)
-      const user = await prisma.user.findUnique({
-        where: { id: filters.userId },
-        select: { email: true },
-      });
-      
-      if (!user) {
-        return [];
-      }
-      
-      // Find all Client records with matching email and tenantId
-      const clientRecords = await prisma.client.findMany({
-        where: {
-          email: user.email,
-          tenantId: filters.tenantId,
-        },
-        select: { id: true },
-      });
-      
-      if (clientRecords.length === 0) {
-        return [];
-      }
-      
-      const clientIds = clientRecords.map(c => c.id);
-      
-      // Get bookings for these Client records
-      // Also include bookings they created themselves (for backward compatibility)
-      const bookings = await prisma.booking.findMany({
+      // Clients should only see bookings they created with their own user account.
+      // Do not merge across multiple client records via email, to avoid showing
+      // bookings from other client users (e.g., other people under same reseller).
+      return prisma.booking.findMany({
         where: {
           tenantId: filters.tenantId,
-          OR: [
-            { clientId: { in: clientIds } },
-            { createdBy: filters.userId },
-          ],
+          createdBy: filters.userId,
           ...(filters.status ? { status: filters.status } : {}),
         },
         include: {
@@ -273,8 +338,6 @@ export class BookingService {
         take: filters.limit,
         skip: filters.offset,
       });
-      
-      return bookings;
     } else if (filters.userRole === 'reseller') {
       return bookingRepo.findByReseller(filters.userId, {
         status: filters.status,
@@ -317,7 +380,8 @@ export class BookingService {
       );
     }
 
-    // Update booking
+    // Update booking status to 'scheduled' without triggering status change notification
+    // (We'll send a specific "Driver assigned" notification instead)
     const updatedBooking = await bookingRepo.update(booking.id, {
       status: 'scheduled',
       driverId: driverId,
@@ -333,14 +397,152 @@ export class BookingService {
       notes: `Driver ${driver.name} assigned`,
     });
 
-    // Create job (if not already created)
-    if (!booking.jobId) {
-      const { JobService } = await import('./job.service');
-      const jobService = new JobService();
-      await jobService.createJobFromBooking(booking.id, driverId);
+    // Notify client/reseller of driver assignment (this replaces "Booking scheduled" notification)
+    const { notifyDriverAssignment } = await import('../utils/notifications');
+    // Notify booking creator (client or reseller creating the booking)
+    await notifyDriverAssignment(
+      booking.id,
+      booking.bookingNumber,
+      driver.name,
+      booking.createdBy,
+      booking.tenantId
+    );
+    // If there is a separate reseller linked to this booking, notify them as well
+    if (booking.resellerId && booking.resellerId !== booking.createdBy) {
+      await notifyDriverAssignment(
+        booking.id,
+        booking.bookingNumber,
+        driver.name,
+        booking.resellerId,
+        booking.tenantId
+      );
     }
 
+    // Create or update job
+    const { JobService } = await import('./job.service');
+    const jobService = new JobService();
+    if (!booking.jobId) {
+      // Create job if it doesn't exist (this will send notification to driver)
+      await jobService.createJobFromBooking(booking.id, driverId);
+    } else {
+      // Update existing job to 'routed' and assign driver
+      const jobRepo = new JobRepository();
+      const job = await jobRepo.findById(booking.jobId);
+      if (job) {
+        if (isValidJobTransition(job.status, 'routed')) {
+          await jobRepo.update(job.id, {
+            status: 'routed',
+            driverId: driverId,
+          });
+          await jobRepo.addStatusHistory(job.id, {
+            status: 'routed',
+            changedBy: scheduledBy,
+            notes: `Driver ${driver.name} assigned - job moved to routed status`,
+          });
+          // Notify driver of job status change (routed) - this replaces notifyJobAssignment
+          const { notifyJobStatusChange } = await import('../utils/notifications');
+          await notifyJobStatusChange(
+            job.id,
+            job.erpJobNumber,
+            'routed',
+            driverId,
+            booking.tenantId,
+            'driver'
+          );
+        } else {
+          // If transition is not valid, just assign the driver
+          await jobRepo.update(job.id, {
+            driverId: driverId,
+          });
+          // Notify driver of job assignment (status didn't change, so use assignment notification)
+          const { notifyJobAssignment } = await import('../utils/notifications');
+          await notifyJobAssignment(
+            job.id,
+            job.erpJobNumber,
+            driverId,
+            booking.tenantId
+          );
+        }
+      }
+    }
+
+    // Note: We don't send "Booking scheduled" notification here because
+    // we already sent "Driver assigned" notification above, which replaces it
+
     return this.getBookingById(booking.id);
+  }
+
+  /**
+   * Approve a pending booking (change from pending to created)
+   */
+  async approveBooking(bookingId: string, approvedBy: string, notes?: string) {
+    const booking = await this.getBookingById(bookingId);
+
+    if (booking.status !== 'pending') {
+      throw new ValidationError(
+        `Cannot approve booking in "${booking.status}" status. Only "pending" bookings can be approved.`
+      );
+    }
+
+    const updatedBooking = await this.updateStatus(bookingId, 'created', approvedBy, notes || 'Booking approved by admin');
+
+    // Create job with status 'booked' when booking is approved (if job doesn't exist)
+    if (!booking.jobId && booking.erpJobNumber) {
+      const jobRepo = new JobRepository();
+      const existingJob = await jobRepo.findByBookingId(booking.id);
+      
+      if (!existingJob) {
+        // Calculate travel emissions from booking's round trip distance and preferred vehicle fuel type
+        // Use booking's preferredVehicleType (fuel type: petrol/diesel/electric) if available
+        // Default vehicle type is "Van" (0.24 kg/km), but if fuel type is specified, use that fuel type's emission factor
+        // If no fuel type specified, default to Van's emission factor
+        const vehicleFuelType = booking.preferredVehicleType || 'van'; // Default to 'van' (0.24 kg/km) if not specified
+        const roundTripDistanceKm = booking.roundTripDistanceKm || 80; // Fallback to 80km if not set
+        const travelEmissions = calculateTravelEmissions(roundTripDistanceKm, vehicleFuelType);
+
+        // Create job with status 'booked'
+        const job = await jobRepo.create({
+          erpJobNumber: booking.erpJobNumber,
+          bookingId: booking.id,
+          tenantId: booking.tenantId,
+          clientName: booking.client.name,
+          siteName: booking.siteName,
+          siteAddress: booking.siteAddress,
+          status: 'booked',
+          scheduledDate: booking.scheduledDate,
+          co2eSaved: booking.estimatedCO2e,
+          travelEmissions: travelEmissions, // Calculate from booking's round trip distance and preferred vehicle type
+          buybackValue: booking.estimatedBuyback,
+          charityPercent: booking.charityPercent,
+        });
+
+        // Create job assets from booking assets
+        for (const bookingAsset of booking.assets) {
+          await prisma.jobAsset.create({
+            data: {
+              jobId: job.id,
+              categoryId: bookingAsset.categoryId,
+              categoryName: bookingAsset.categoryName,
+              quantity: bookingAsset.quantity,
+            },
+          });
+        }
+
+        // Add status history
+        await jobRepo.addStatusHistory(job.id, {
+          status: 'booked',
+          changedBy: approvedBy,
+          notes: 'Job created when booking was approved',
+        });
+
+        // Link job to booking
+        await bookingRepo.update(booking.id, {
+          jobId: job.id,
+        });
+      }
+    }
+
+    return updatedBooking;
   }
 
   /**
@@ -382,6 +584,148 @@ export class BookingService {
       changedBy,
       notes,
     });
+
+    // Resolve the actual client user (invited client) if one exists, based on the Client record's email.
+    const clientUserForStatus = booking.client?.email
+      ? await prisma.user.findFirst({
+          where: {
+            tenantId: booking.tenantId,
+            email: booking.client.email,
+            role: 'client',
+          },
+        })
+      : null;
+    const clientStatusUserId = clientUserForStatus?.id || booking.createdBy;
+
+    // Notify client/reseller of booking status change
+    // Note: We don't notify here if the status change is triggered by job status change
+    // (to avoid duplicate notifications). Only notify for admin-initiated booking status changes.
+    // For job-initiated changes, notification is handled in job.service.ts
+    // Also, don't notify for 'scheduled' status when driver is assigned (handled separately in assignDriver)
+    // Don't notify for 'completed' status - it will be handled by job.service.ts when job status is updated
+    // Don't notify for 'sanitised' and 'graded' status here - they will be handled by job.service.ts when job status is updated
+    if (newStatus !== 'scheduled' && newStatus !== 'completed' && newStatus !== 'sanitised' && newStatus !== 'graded') {
+      const { notifyBookingStatusChange } = await import('../utils/notifications');
+      // Notify the booking creator (client or reseller)
+      await notifyBookingStatusChange(
+        booking.id,
+        booking.bookingNumber,
+        newStatus,
+        clientStatusUserId,
+        booking.tenantId
+      );
+
+      // Additionally, for important status changes, notify the reseller linked to this booking
+      // Important for reseller: booking approved ('created')
+      const resellerUserId = booking.resellerId || booking.client?.resellerId;
+      if (resellerUserId && resellerUserId !== clientStatusUserId && newStatus === 'created') {
+        await notifyBookingStatusChange(
+          booking.id,
+          booking.bookingNumber,
+          newStatus,
+          resellerUserId,
+          booking.tenantId
+        );
+      }
+    }
+
+    // Also notify driver if booking has a driver assigned and status change is admin-initiated
+    // (Driver notifications for job status changes are handled in job.service.ts)
+    // Note: Only notify driver for 'scheduled' status (maps to 'routed' job status)
+    // Other status changes are handled by job.service.ts when job status changes
+    if (booking.driverId && newStatus === 'scheduled') {
+      const { notifyJobStatusChange } = await import('../utils/notifications');
+      const jobRepo = new JobRepository();
+      const job = booking.jobId 
+        ? await jobRepo.findById(booking.jobId)
+        : await jobRepo.findByBookingId(booking.id);
+      
+      if (job) {
+        // Map booking status 'scheduled' to job status 'routed' for notification
+        await notifyJobStatusChange(
+          job.id,
+          job.erpJobNumber,
+          'routed',
+          booking.driverId,
+          booking.tenantId,
+          'driver'
+        );
+      }
+    }
+
+    // If booking is graded, notify admins for final approval
+    if (newStatus === 'graded') {
+      const adminUsers = await prisma.user.findMany({
+        where: {
+          tenantId: booking.tenantId,
+          role: 'admin',
+          status: 'active',
+        },
+        select: { id: true },
+      });
+      if (adminUsers.length > 0) {
+        const { notifyGradedForApproval } = await import('../utils/notifications');
+        await notifyGradedForApproval(
+          booking.id,
+          booking.bookingNumber,
+          adminUsers.map(u => u.id),
+          booking.tenantId
+        );
+      }
+    }
+
+    // Sync job status when booking status changes
+    // Find job by bookingId (jobId might not be set yet)
+    const jobRepo = new JobRepository();
+    const job = booking.jobId 
+      ? await jobRepo.findById(booking.jobId)
+      : await jobRepo.findByBookingId(booking.id);
+    
+    if (job) {
+        // Map booking status to job status
+        let targetJobStatus: JobStatus | null = null;
+
+        // Map booking statuses to job statuses
+        if (newStatus === 'created') {
+          // Booking created means job should be 'booked'
+          targetJobStatus = 'booked';
+        } else if (newStatus === 'scheduled') {
+          // Booking scheduled means job is routed (driver assigned)
+          targetJobStatus = 'routed';
+        } else if (newStatus === 'collected') {
+          // Booking collected - job should be "collected" or "warehouse"
+          // If job is already at warehouse or beyond, keep it; otherwise set to collected
+          if (['warehouse', 'sanitised', 'graded', 'completed'].includes(job.status)) {
+            // Don't update - job is already ahead
+            targetJobStatus = null;
+          } else {
+            targetJobStatus = 'collected';
+          }
+        } else if (newStatus === 'sanitised') {
+          targetJobStatus = 'sanitised';
+        } else if (newStatus === 'graded') {
+          targetJobStatus = 'graded';
+        } else if (newStatus === 'completed') {
+          targetJobStatus = 'completed';
+        } else if (newStatus === 'cancelled') {
+          targetJobStatus = 'cancelled';
+        }
+
+        // Update job status if it's different and the transition is valid
+        // Use JobService.updateStatus to ensure notifications are sent
+        if (targetJobStatus && job.status !== targetJobStatus) {
+          if (isValidJobTransition(job.status, targetJobStatus)) {
+            const { JobService } = await import('./job.service');
+            const jobService = new JobService();
+            await jobService.updateStatus(
+              job.id,
+              targetJobStatus,
+              changedBy,
+              `Updated from booking status: ${newStatus}`
+            );
+          }
+        }
+      }
 
     return this.getBookingById(booking.id);
   }

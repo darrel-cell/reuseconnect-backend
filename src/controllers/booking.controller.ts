@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { BookingService } from '../services/booking.service';
 import { AuthenticatedRequest, ApiResponse } from '../types';
 import { transformBookingForAPI, transformBookingsForAPI } from '../utils/booking-transform';
@@ -100,12 +100,12 @@ export class BookingController {
       });
 
       const transformedBooking = transformBookingForAPI(booking as any);
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: transformedBooking,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -114,12 +114,12 @@ export class BookingController {
       const { id } = req.params;
       const booking = await bookingService.getBookingById(id);
       const transformedBooking = transformBookingForAPI(booking as any);
-      res.json({
+      return res.json({
         success: true,
         data: transformedBooking,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -144,12 +144,12 @@ export class BookingController {
       });
 
       const transformedBookings = transformBookingsForAPI(bookings as any[]);
-      res.json({
+      return res.json({
         success: true,
         data: transformedBookings,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -168,12 +168,68 @@ export class BookingController {
       const booking = await bookingService.assignDriver(id, driverId, req.user.userId);
 
       const transformedBooking = transformBookingForAPI(booking as any);
-      res.json({
+      return res.json({
         success: true,
         data: transformedBooking,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
+    }
+  }
+
+  async approve(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized',
+        } as ApiResponse);
+      }
+
+      const { id } = req.params;
+      const { notes } = req.body;
+
+      const booking = await bookingService.approveBooking(id, req.user.userId, notes);
+
+      const transformedBooking = transformBookingForAPI(booking as any);
+      return res.json({
+        success: true,
+        data: transformedBooking,
+        message: 'Booking approved successfully',
+      } as ApiResponse);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async complete(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized',
+        } as ApiResponse);
+      }
+
+      const { id } = req.params;
+      const { notes } = req.body;
+
+      // Complete booking (changes from graded to completed)
+      const booking = await bookingService.updateStatus(
+        id,
+        'completed',
+        req.user.userId,
+        notes || 'Booking completed and approved'
+      );
+
+      const transformedBooking = transformBookingForAPI(booking as any);
+      return res.json({
+        success: true,
+        data: transformedBooking,
+        message: 'Booking completed successfully',
+      } as ApiResponse);
+    } catch (error) {
+      return next(error);
     }
   }
 
@@ -197,12 +253,12 @@ export class BookingController {
       );
 
       const transformedBooking = transformBookingForAPI(booking as any);
-      res.json({
+      return res.json({
         success: true,
         data: transformedBooking,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

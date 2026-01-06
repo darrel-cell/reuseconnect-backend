@@ -88,3 +88,31 @@ export function requireOwnershipOrAdmin(tenantIdField = 'tenantId') {
     next();
   };
 }
+
+/**
+ * Middleware to allow admins and booking owners (clients/resellers) to view records
+ * This is used for GET endpoints that should be viewable by booking owners
+ */
+export function allowAdminOrBookingOwner(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.user) {
+    return next(new UnauthorizedError('Authentication required'));
+  }
+
+  // Admin can access any resource
+  if (req.user.role === 'admin') {
+    return next();
+  }
+
+  // For clients and resellers, we'll check booking ownership in the controller
+  // This middleware just allows them to proceed to the controller
+  if (['client', 'reseller'].includes(req.user.role)) {
+    return next();
+  }
+
+  // Other roles are not allowed
+  return next(new ForbiddenError('Access denied'));
+}

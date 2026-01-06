@@ -173,7 +173,14 @@ export class BookingRepository {
     limit?: number;
     offset?: number;
   }) {
-    const where: any = { resellerId };
+    // Resellers should see bookings that are explicitly linked to them via booking.resellerId
+    // OR bookings for clients whose Client record has resellerId = this reseller.
+    const where: any = {
+      OR: [
+        { resellerId },
+        { client: { resellerId } },
+      ],
+    };
     if (filters?.status) {
       where.status = filters.status;
     }

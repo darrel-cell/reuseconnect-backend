@@ -6,6 +6,7 @@ import { BookingStatus, JobStatus } from '../types';
  * Booking status transitions (matching frontend logic)
  */
 export const bookingTransitions: Record<BookingStatus, BookingStatus[]> = {
+  pending: ['created', 'cancelled'],
   created: ['scheduled', 'cancelled'],
   scheduled: ['collected', 'cancelled'],
   collected: ['sanitised'],

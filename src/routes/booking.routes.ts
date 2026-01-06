@@ -36,6 +36,20 @@ router.post(
   bookingController.assignDriver.bind(bookingController)
 );
 
+// Approve booking (admin only) - changes from pending to created
+router.post(
+  '/:id/approve',
+  requireAdmin,
+  bookingController.approve.bind(bookingController)
+);
+
+// Complete booking (admin only) - changes from graded to completed (final approval)
+router.post(
+  '/:id/complete',
+  requireAdmin,
+  bookingController.complete.bind(bookingController)
+);
+
 // Update booking status (admin only)
 router.patch(
   '/:id/status',

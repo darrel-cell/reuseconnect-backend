@@ -19,12 +19,18 @@ export class DashboardController {
 
       const { tenantId, role, userId } = req.user;
 
-      // Get jobs based on role
+      // Get jobs based on role (include booking to access roundTripDistanceKm)
       let jobs: any[] = [];
       if (role === 'admin') {
-        jobs = await jobRepo.findByTenant(tenantId);
+        jobs = await prisma.job.findMany({
+          where: { tenantId },
+          include: { booking: true },
+        });
       } else if (role === 'driver') {
-        jobs = await jobRepo.findByDriver(userId);
+        jobs = await prisma.job.findMany({
+          where: { driverId: userId, tenantId },
+          include: { booking: true },
+        });
       } else if (role === 'client') {
         // Clients see jobs for bookings for their Client record(s) or bookings they created
         // First, find the Client record(s) associated with this user (by email and tenantId)
@@ -68,6 +74,7 @@ export class DashboardController {
               tenantId,
               bookingId: { in: bookingIds },
             },
+            include: { booking: true },
           });
         }
       } else if (role === 'reseller') {
@@ -78,12 +85,17 @@ export class DashboardController {
             tenantId,
             bookingId: { in: bookingIds },
           },
+          include: { booking: true },
         });
       }
 
       // Calculate stats
       const totalJobs = jobs.length;
-      const activeJobs = jobs.filter(j => j.status !== 'completed').length;
+      // For drivers, exclude jobs at "warehouse" or later (those should only appear in Job History)
+      // For other roles, exclude "completed" and "cancelled" jobs
+      const activeJobs = role === 'driver'
+        ? jobs.filter(j => !['warehouse', 'sanitised', 'graded', 'completed', 'cancelled'].includes(j.status)).length
+        : jobs.filter(j => j.status !== 'completed' && j.status !== 'cancelled').length;
       const totalCO2eSaved = jobs.reduce((sum, j) => sum + (j.co2eSaved || 0), 0);
       const totalBuyback = jobs.reduce((sum, j) => sum + (j.buybackValue || 0), 0);
       
@@ -102,9 +114,20 @@ export class DashboardController {
 
       // Calculate travel emissions breakdown
       const totalTravelEmissions = jobs.reduce((sum, j) => sum + (j.travelEmissions || 0), 0);
-      // Estimate distance from emissions (using average 0.24 kg/km for van)
-      const avgEmissionsPerKm = 0.24;
-      const totalDistanceKm = totalTravelEmissions / avgEmissionsPerKm;
+      
+      // Sum up actual round trip distances from bookings (more accurate than deriving from emissions)
+      // Use booking's roundTripDistanceKm if available, otherwise estimate from emissions
+      const avgEmissionsPerKm = 0.24; // Fallback for jobs without booking distance
+      let totalDistanceKm = 0;
+      for (const job of jobs) {
+        if (job.booking?.roundTripDistanceKm) {
+          // Use actual distance from booking
+          totalDistanceKm += job.booking.roundTripDistanceKm;
+        } else if (job.travelEmissions && job.travelEmissions > 0) {
+          // Fallback: estimate from emissions if booking distance not available
+          totalDistanceKm += job.travelEmissions / avgEmissionsPerKm;
+        }
+      }
 
       // Separate completed and booked jobs
       const completedJobs = jobs.filter(j => j.status === 'completed');

@@ -5,6 +5,7 @@ export type UserRole = 'admin' | 'client' | 'reseller' | 'driver';
 export type UserStatus = 'pending' | 'active' | 'inactive';
 
 export type BookingStatus = 
+  | 'pending'
   | 'created' 
   | 'scheduled' 
   | 'collected' 

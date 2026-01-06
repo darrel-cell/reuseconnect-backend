@@ -12,6 +12,10 @@ import sitesRoutes from './routes/sites.routes';
 import usersRoutes from './routes/users.routes';
 import invitesRoutes from './routes/invites.routes';
 import co2Routes from './routes/co2.routes';
+import sanitisationRoutes from './routes/sanitisation.routes';
+import gradingRoutes from './routes/grading.routes';
+import notificationRoutes from './routes/notification.routes';
+import organisationProfileRoutes from './routes/organisation-profile.routes';
 
 const app: Express = express();
 
@@ -37,6 +41,10 @@ app.use('/api/sites', sitesRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/invites', invitesRoutes);
 app.use('/api/co2', co2Routes);
+app.use('/api/sanitisation', sanitisationRoutes);
+app.use('/api/grading', gradingRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/organisation-profile', organisationProfileRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);

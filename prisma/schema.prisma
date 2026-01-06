@@ -31,6 +31,8 @@ model User {
   documents       Document[]
   invitesSent     Invite[] @relation("InvitedBy")
   driverProfile   DriverProfile?
+  organisationProfile OrganisationProfile?
+  notifications   Notification[] @relation("UserNotifications")
 
   @@index([email])
   @@index([tenantId])
@@ -69,6 +71,7 @@ model Tenant {
   bookings    Booking[]
   jobs        Job[]
   sites       Site[]
+  notifications Notification[]
   documents   Document[]
 
   @@index([slug])
@@ -163,7 +166,7 @@ model Booking {
   lat               Float?
   lng               Float?
   scheduledDate     DateTime
-  status            BookingStatus @default(created)
+  status            BookingStatus @default(pending)
   charityPercent    Int      @default(0)
   estimatedCO2e     Float
   estimatedBuyback  Float
@@ -204,6 +207,7 @@ model Booking {
 }
 
 enum BookingStatus {
+  pending
   created
   scheduled
   collected
@@ -344,6 +348,22 @@ model DriverProfile {
   phone           String?  // Driver phone number
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Organisation Profile (for resellers and admins)
+model OrganisationProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisationName  String
+  registrationNumber String
+  address           String
+  email             String
+  phone             String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([userId])
 }
@@ -560,4 +580,35 @@ enum CommissionStatus {
   pending
   approved
   paid
+}
+
+// Notifications
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  message     String
+  read        Boolean  @default(false)
+  url         String?  // Optional URL to navigate to when clicked
+  relatedId   String?  // ID of related entity (jobId, bookingId, etc.)
+  relatedType String?  // Type of related entity (job, booking, etc.)
+  createdAt   DateTime @default(now())
+  readAt      DateTime?
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([read])
+  @@index([createdAt])
+  @@index([userId, read])
+}
+
+enum NotificationType {
+  success
+  warning
+  info
+  error
 }
