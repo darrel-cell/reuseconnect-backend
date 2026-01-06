@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { hashPassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { BadRequestError, NotFoundError } from '../utils/errors';
+import { emailService } from '../utils/email';
 import crypto from 'crypto';
 
 interface CreateInviteData {
@@ -47,7 +48,7 @@ export class InviteService {
     });
 
     if (existingUser) {
-      throw new BadRequestError('A user with this email already exists');
+      throw new BadRequestError('This email address is already registered. Please use a different email address.');
     }
 
     // Check if there's an active (non-expired, non-accepted) invite for this email and tenant
@@ -113,6 +114,37 @@ export class InviteService {
         },
       },
     });
+
+    // Send invitation email via EmailJS
+    try {
+      console.log(`[Invite Service] Checking email service configuration...`);
+      const isEmailConfigured = emailService.isConfigured();
+      console.log(`[Invite Service] Email service configured: ${isEmailConfigured}`);
+      
+      if (isEmailConfigured) {
+        console.log(`[Invite Service] Sending invitation email to ${email}...`);
+        await emailService.sendInviteEmail({
+          toEmail: email,
+          inviteToken: token!,
+          role,
+          tenantName,
+          inviterName: invite.inviter.name,
+          expiresInDays: 14,
+        });
+        console.log(`[Invite Service] ✓ Invitation email sent successfully to ${email}`);
+      } else {
+        console.warn(`[Invite Service] ⚠ EmailJS not configured. Invitation created but email not sent to ${email}`);
+        console.warn(`[Invite Service] Check your .env file for EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, and EMAILJS_PUBLIC_KEY`);
+      }
+    } catch (error) {
+      // Log error but don't fail invitation creation
+      // The invitation is still valid even if email fails
+      console.error(`[Invite Service] ✗ Failed to send invitation email to ${email}:`, error);
+      if (error instanceof Error) {
+        console.error(`[Invite Service] Error message: ${error.message}`);
+        console.error(`[Invite Service] Error stack: ${error.stack}`);
+      }
+    }
 
     return {
       id: invite.id,

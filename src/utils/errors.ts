@@ -19,6 +19,13 @@ export class ValidationError extends AppError {
   }
 }
 
+export class BadRequestError extends AppError {
+  constructor(message: string) {
+    super(400, message, true);
+    Object.setPrototypeOf(this, BadRequestError.prototype);
+  }
+}
+
 export class NotFoundError extends AppError {
   constructor(resource: string, id?: string) {
     super(404, id ? `${resource} with ID "${id}" not found` : `${resource} not found`, true);

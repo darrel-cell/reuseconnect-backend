@@ -22,5 +22,14 @@ export const config = {
     lat: parseFloat(process.env.WAREHOUSE_LAT || '51.5174'),
     lng: parseFloat(process.env.WAREHOUSE_LNG || '0.1904'),
   },
+  email: {
+    enabled: process.env.EMAILJS_ENABLED !== 'false',
+    serviceId: process.env.EMAILJS_SERVICE_ID || '',
+    templateId: process.env.EMAILJS_TEMPLATE_ID || '',
+    publicKey: process.env.EMAILJS_PUBLIC_KEY || '',
+    privateKey: process.env.EMAILJS_PRIVATE_KEY || '', // Optional but recommended for Node.js
+    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+    supportEmail: process.env.SUPPORT_EMAIL || 'support@example.com',
+  },
 };
 

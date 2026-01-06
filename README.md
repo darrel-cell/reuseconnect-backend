@@ -99,6 +99,18 @@ ERP_BASE_URL="http://localhost:3001/api/erp"
 WAREHOUSE_POSTCODE="RM13 8BT"
 WAREHOUSE_LAT=51.5174
 WAREHOUSE_LNG=0.1904
+
+# EmailJS (for sending invitation emails)
+EMAILJS_ENABLED=true
+EMAILJS_SERVICE_ID=service_xxxxx
+EMAILJS_TEMPLATE_ID=template_xxxxx
+EMAILJS_PUBLIC_KEY=xxxxxxxxxxxxx
+EMAILJS_PRIVATE_KEY=xxxxxxxxxxxxx  # Optional but recommended for Node.js/backend
+FRONTEND_URL=http://localhost:5173
+SUPPORT_EMAIL=support@example.com
+
+# Note: If EMAILJS_PRIVATE_KEY is not set, you must enable 
+# "API calls for non-browser applications" in EmailJS dashboard
 ```
 
 ### 4. Run Development Server
