@@ -38,6 +38,8 @@ export interface TransformedJob {
   travelEmissions: number;
   buybackValue: number;
   charityPercent: number;
+  roundTripDistanceKm?: number | null; // From booking
+  roundTripDistanceMiles?: number | null; // From booking
   evidence?: Array<{
     status: string; // Status for which this evidence was submitted
     photos: string[];
@@ -120,6 +122,8 @@ export function transformJobForAPI(job: any): TransformedJob {
     travelEmissions: job.travelEmissions || 0,
     buybackValue: job.buybackValue || 0,
     charityPercent: job.charityPercent || 0,
+    roundTripDistanceKm: job.booking?.roundTripDistanceKm ?? null,
+    roundTripDistanceMiles: job.booking?.roundTripDistanceMiles ?? null,
     evidence: (() => {
       // Debug: Log raw evidence data - ALWAYS log to help diagnose
       console.log('[Evidence Transform] Job ID:', job.id);
