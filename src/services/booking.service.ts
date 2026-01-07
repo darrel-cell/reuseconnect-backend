@@ -616,9 +616,9 @@ export class BookingService {
       );
 
       // Additionally, for important status changes, notify the reseller linked to this booking
-      // Important for reseller: booking approved ('created')
+      // Important for reseller: booking approved ('created') and booking cancelled ('cancelled')
       const resellerUserId = booking.resellerId || booking.client?.resellerId;
-      if (resellerUserId && resellerUserId !== clientStatusUserId && newStatus === 'created') {
+      if (resellerUserId && resellerUserId !== clientStatusUserId && (newStatus === 'created' || newStatus === 'cancelled')) {
         await notifyBookingStatusChange(
           booking.id,
           booking.bookingNumber,

@@ -59,6 +59,7 @@ router.get(
       const transformedClients = clients.map(client => ({
         id: client.id,
         name: client.name,
+        organisationName: client.organisationName || undefined,
         tenantId: client.tenantId,
         tenantName: client.tenant?.name || '',
         email: client.email || '',
@@ -141,6 +142,7 @@ router.get(
       const transformedClient = {
         id: client.id,
         name: client.name,
+        organisationName: client.organisationName || undefined,
         tenantId: client.tenantId,
         tenantName: client.tenant?.name || '',
         email: client.email || '',
@@ -371,6 +373,7 @@ router.patch(
       const transformedClient = {
         id: updatedClient.id,
         name: updatedClient.name,
+        organisationName: updatedClient.organisationName || undefined,
         tenantId: updatedClient.tenantId,
         tenantName: updatedClient.tenant?.name || '',
         email: updatedClient.email || '',

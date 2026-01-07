@@ -4,6 +4,7 @@ import { hashPassword, comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { ValidationError, NotFoundError, UnauthorizedError } from '../utils/errors';
 import { UserRole } from '../types';
+import prisma from '../config/database';
 // UUID generation not needed for Prisma (auto-generated)
 
 const userRepo = new UserRepository();
@@ -89,10 +90,19 @@ export class AuthService {
       throw new ValidationError('Drivers must be invited by an administrator. Please use the invitation link to join.');
     }
 
+    // Generate slug from company name
+    const slug = data.companyName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    
+    // Check if slug already exists
+    const existingTenant = await tenantRepo.findBySlug(slug);
+    if (existingTenant) {
+      throw new ValidationError('A company with this name already exists. Please use a different company name.');
+    }
+
     // Create tenant
     const tenant = await tenantRepo.create({
       name: data.companyName,
-      slug: data.companyName.toLowerCase().replace(/\s+/g, '-'),
+      slug: slug,
       primaryColor: '168, 70%, 35%',
       accentColor: '168, 60%, 45%',
       theme: 'auto',
@@ -106,14 +116,44 @@ export class AuthService {
     // In development, auto-activate for easier testing
     const userStatus = process.env.NODE_ENV === 'production' ? 'pending' : 'active';
     
+    const userRole = (data.role || 'client') as UserRole;
+
     const user = await userRepo.create({
       email: data.email,
       name: data.name,
       password: hashedPassword,
-      role: (data.role || 'client') as UserRole,
+      role: userRole,
       status: userStatus,
       tenantId: tenant.id,
     });
+
+    // If role is 'client', create a Client record with the organisationName from companyName
+    if (userRole === 'client') {
+      await prisma.client.create({
+        data: {
+          tenantId: tenant.id,
+          name: data.name,
+          email: data.email,
+          organisationName: data.companyName, // Save companyName as organisationName
+          status: 'active',
+        },
+      });
+    }
+
+    // If role is 'reseller', create an OrganisationProfile with organisationName from companyName
+    if (userRole === 'reseller') {
+      await prisma.organisationProfile.create({
+        data: {
+          userId: user.id,
+          organisationName: data.companyName,
+          // These can be completed later in Settings → Organisation section
+          registrationNumber: '',
+          address: '',
+          email: data.email,
+          phone: '',
+        },
+      });
+    }
 
     const token = generateToken({
       userId: user.id,

@@ -13,6 +13,7 @@ export interface TransformedBooking {
   bookingNumber?: string;
   clientId?: string;
   clientName?: string;
+  organisationName?: string; // Organisation/company name
   resellerId?: string;
   resellerName?: string;
   siteName?: string;
@@ -31,6 +32,7 @@ export interface TransformedBooking {
   sanitisedAt?: string;
   gradedAt?: string;
   completedAt?: string;
+  cancellationNotes?: string; // Notes from cancellation status history
   assets?: Array<{
     id: string;
     categoryId: string;
@@ -73,6 +75,7 @@ export function transformBookingForAPI(booking: any): TransformedBooking {
     bookingNumber: booking.bookingNumber,
     clientId: booking.clientId,
     clientName: booking.client?.name || booking.clientName,
+    organisationName: booking.client?.organisationName || undefined,
     resellerId: booking.resellerId,
     resellerName: booking.resellerName,
     siteName: booking.siteName,
@@ -103,6 +106,19 @@ export function transformBookingForAPI(booking: any): TransformedBooking {
     completedAt: booking.completedAt instanceof Date
       ? booking.completedAt.toISOString()
       : booking.completedAt,
+    cancellationNotes: (() => {
+      // Find cancellation notes from status history
+      if (booking.statusHistory && Array.isArray(booking.statusHistory)) {
+        // Find the most recent cancelled status entry
+        const cancelledHistory = booking.statusHistory.find((h: any) => 
+          h.status === 'cancelled' || h.status === 'Cancelled'
+        );
+        if (cancelledHistory?.notes) {
+          return cancelledHistory.notes;
+        }
+      }
+      return undefined;
+    })(),
     assets: (booking.assets || []).map((asset: any) => ({
       id: asset.id,
       categoryId: asset.categoryId,

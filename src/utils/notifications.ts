@@ -201,6 +201,11 @@ export async function notifyBookingStatusChange(
       message: `Booking ${bookingNumber} has been completed`,
       type: 'success',
     },
+    'cancelled': {
+      title: 'Booking cancelled',
+      message: `Booking ${bookingNumber} has been cancelled`,
+      type: 'warning',
+    },
   };
 
   const statusInfo = statusMessages[status];
