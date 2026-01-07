@@ -6,11 +6,11 @@ async function cleanupDatabase() {
   console.log('🧹 Starting database cleanup...\n');
 
   try {
-    // Find Reuse ITAD Platform tenant
+    // Find Reuse Connect ITAD Platform tenant
     const reuseTenant = await prisma.tenant.findFirst({
       where: {
         OR: [
-          { name: 'Reuse ITAD Platform' },
+          { name: 'Reuse Connect ITAD Platform' },
           { slug: 'reuse' },
         ],
       },
@@ -19,10 +19,10 @@ async function cleanupDatabase() {
     let reuseTenantId: string;
     
     if (!reuseTenant) {
-      console.log('⚠️  Reuse ITAD Platform tenant not found. Creating it...');
+      console.log('⚠️  Reuse Connect ITAD Platform tenant not found. Creating it...');
       const newTenant = await prisma.tenant.create({
         data: {
-          name: 'Reuse ITAD Platform',
+          name: 'Reuse Connect ITAD Platform',
           slug: 'reuse',
           primaryColor: '168, 70%, 35%',
           accentColor: '168, 60%, 45%',
@@ -30,10 +30,10 @@ async function cleanupDatabase() {
         },
       });
       reuseTenantId = newTenant.id;
-      console.log('✅ Created Reuse ITAD Platform tenant\n');
+      console.log('✅ Created Reuse Connect ITAD Platform tenant\n');
     } else {
       reuseTenantId = reuseTenant.id;
-      console.log(`✅ Found Reuse ITAD Platform tenant: ${reuseTenant.name} (${reuseTenantId})\n`);
+      console.log(`✅ Found Reuse Connect ITAD Platform tenant: ${reuseTenant.name} (${reuseTenantId})\n`);
     }
 
     // Step 1: Delete all bookings (this will cascade delete BookingAsset, BookingStatusHistory)
@@ -71,7 +71,7 @@ async function cleanupDatabase() {
     const deletedClients = await prisma.client.deleteMany({});
     console.log(`   ✅ Deleted ${deletedClients.count} clients\n`);
 
-    // Step 8: Delete all documents (except those belonging to Reuse ITAD Platform)
+    // Step 8: Delete all documents (except those belonging to Reuse Connect ITAD Platform)
     console.log('📄 Deleting documents from other tenants...');
     const deletedDocuments = await prisma.document.deleteMany({
       where: {
@@ -95,8 +95,8 @@ async function cleanupDatabase() {
     });
     console.log(`   ✅ Deleted ${deletedUsers.count} non-admin users\n`);
 
-    // Step 11: Delete all tenants except Reuse ITAD Platform
-    console.log('🏢 Deleting all tenants except Reuse ITAD Platform...');
+    // Step 11: Delete all tenants except Reuse Connect ITAD Platform
+    console.log('🏢 Deleting all tenants except Reuse Connect ITAD Platform...');
     const deletedTenants = await prisma.tenant.deleteMany({
       where: {
         id: { not: reuseTenantId },
@@ -121,26 +121,26 @@ async function cleanupDatabase() {
     // Step 14: Delete all asset categories from other tenants (if any exist)
     // Categories are now global, but we're cleaning everything
 
-    // Step 15: Ensure Reuse ITAD Platform tenant exists and is properly configured
-    console.log('🏢 Ensuring Reuse ITAD Platform tenant exists...');
+    // Step 15: Ensure Reuse Connect ITAD Platform tenant exists and is properly configured
+    console.log('🏢 Ensuring Reuse Connect ITAD Platform tenant exists...');
     const finalTenant = await prisma.tenant.upsert({
       where: { id: reuseTenantId },
       update: {
-        name: 'Reuse ITAD Platform',
+        name: 'Reuse Connect ITAD Platform',
         slug: 'reuse',
         primaryColor: '168, 70%, 35%',
         accentColor: '168, 60%, 45%',
         theme: 'auto',
       },
       create: {
-        name: 'Reuse ITAD Platform',
+        name: 'Reuse Connect ITAD Platform',
         slug: 'reuse',
         primaryColor: '168, 70%, 35%',
         accentColor: '168, 60%, 45%',
         theme: 'auto',
       },
     });
-    console.log(`   ✅ Reuse ITAD Platform tenant ready: ${finalTenant.name} (${finalTenant.id})\n`);
+    console.log(`   ✅ Reuse Connect ITAD Platform tenant ready: ${finalTenant.name} (${finalTenant.id})\n`);
 
     // Step 16: Create admin user
     console.log('👤 Creating admin user...');
@@ -255,7 +255,7 @@ async function cleanupDatabase() {
     console.log(`   - Tenants deleted: ${deletedTenants.count}`);
     console.log(`   - Asset categories deleted: ${deletedCategories.count}`);
     console.log(`\n🌱 Seeded Data:`);
-    console.log(`   - Admin company: Reuse ITAD Platform`);
+    console.log(`   - Admin company: Reuse Connect ITAD Platform`);
     console.log(`   - Admin user: ${adminEmail} / ${adminPassword}`);
     console.log(`   - Asset categories: ${createdCategories} items`);
     console.log('\n✅ Database cleanup and seeding completed successfully!\n');

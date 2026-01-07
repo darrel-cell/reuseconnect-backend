@@ -8,7 +8,7 @@ async function createAdmin() {
   const email = 'admin@reuse.com';
   const password = 'admin123';
   const name = 'Admin User';
-  const companyName = 'Reuse ITAD Platform';
+  const companyName = 'Reuse Connect ITAD Platform';
 
   // Check if admin already exists
   const existing = await prisma.user.findUnique({

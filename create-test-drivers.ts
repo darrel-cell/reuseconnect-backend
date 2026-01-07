@@ -13,7 +13,7 @@ async function createTestDrivers() {
   if (!tenant) {
     tenant = await prisma.tenant.create({
       data: {
-        name: 'Reuse ITAD Platform',
+        name: 'Reuse Connect ITAD Platform',
         slug: 'reuse',
         primaryColor: '168, 70%, 35%',
         accentColor: '168, 60%, 45%',
