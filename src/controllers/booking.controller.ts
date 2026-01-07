@@ -187,9 +187,16 @@ export class BookingController {
       }
 
       const { id } = req.params;
-      const { notes } = req.body;
+      const { erpJobNumber, notes } = req.body;
 
-      const booking = await bookingService.approveBooking(id, req.user.userId, notes);
+      if (!erpJobNumber || !erpJobNumber.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: 'Job ID (erpJobNumber) is required',
+        } as ApiResponse);
+      }
+
+      const booking = await bookingService.approveBooking(id, req.user.userId, erpJobNumber.trim(), notes);
 
       const transformedBooking = transformBookingForAPI(booking as any);
       return res.json({

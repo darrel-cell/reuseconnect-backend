@@ -310,11 +310,28 @@ export class BookingService {
   }) {
     // Role-based filtering
     if (filters.userRole === 'admin') {
-      return bookingRepo.findByTenant(filters.tenantId, {
-        status: filters.status,
-        clientId: filters.clientId,
-        limit: filters.limit,
-        offset: filters.offset,
+      // Admins should see all bookings across all tenants (no tenantId filter)
+      const where: any = {};
+      if (filters.status) {
+        where.status = filters.status;
+      }
+      if (filters.clientId) {
+        where.clientId = filters.clientId;
+      }
+
+      return prisma.booking.findMany({
+        where,
+        include: {
+          client: true,
+          site: true,
+          assets: {
+            include: { category: true },
+          },
+          job: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: filters.limit,
+        skip: filters.offset,
       });
     } else if (filters.userRole === 'client') {
       // Clients should only see bookings they created with their own user account.
@@ -475,7 +492,7 @@ export class BookingService {
   /**
    * Approve a pending booking (change from pending to created)
    */
-  async approveBooking(bookingId: string, approvedBy: string, notes?: string) {
+  async approveBooking(bookingId: string, approvedBy: string, erpJobNumber: string, notes?: string) {
     const booking = await this.getBookingById(bookingId);
 
     if (booking.status !== 'pending') {
@@ -484,40 +501,48 @@ export class BookingService {
       );
     }
 
+    // Update booking with ERP Job Number before approving
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { erpJobNumber: erpJobNumber.trim() },
+    });
+
     const updatedBooking = await this.updateStatus(bookingId, 'created', approvedBy, notes || 'Booking approved by admin');
 
     // Create job with status 'booked' when booking is approved (if job doesn't exist)
-    if (!booking.jobId && booking.erpJobNumber) {
+    // Use updatedBooking.erpJobNumber (which was just set) instead of booking.erpJobNumber
+    if (!updatedBooking.jobId && updatedBooking.erpJobNumber) {
       const jobRepo = new JobRepository();
-      const existingJob = await jobRepo.findByBookingId(booking.id);
+      const existingJob = await jobRepo.findByBookingId(updatedBooking.id);
       
       if (!existingJob) {
         // Calculate travel emissions from booking's round trip distance and preferred vehicle fuel type
-        // Use booking's preferredVehicleType (fuel type: petrol/diesel/electric) if available
+        // Use updatedBooking's preferredVehicleType (fuel type: petrol/diesel/electric) if available
         // Default vehicle type is "Van" (0.24 kg/km), but if fuel type is specified, use that fuel type's emission factor
         // If no fuel type specified, default to Van's emission factor
-        const vehicleFuelType = booking.preferredVehicleType || 'van'; // Default to 'van' (0.24 kg/km) if not specified
-        const roundTripDistanceKm = booking.roundTripDistanceKm || 80; // Fallback to 80km if not set
+        const vehicleFuelType = updatedBooking.preferredVehicleType || 'van'; // Default to 'van' (0.24 kg/km) if not specified
+        const roundTripDistanceKm = updatedBooking.roundTripDistanceKm || 80; // Fallback to 80km if not set
         const travelEmissions = calculateTravelEmissions(roundTripDistanceKm, vehicleFuelType);
 
         // Create job with status 'booked'
+        // Use updatedBooking.erpJobNumber which contains the manually entered Job ID
         const job = await jobRepo.create({
-          erpJobNumber: booking.erpJobNumber,
-          bookingId: booking.id,
-          tenantId: booking.tenantId,
-          clientName: booking.client.name,
-          siteName: booking.siteName,
-          siteAddress: booking.siteAddress,
+          erpJobNumber: updatedBooking.erpJobNumber,
+          bookingId: updatedBooking.id,
+          tenantId: updatedBooking.tenantId,
+          clientName: updatedBooking.client.name,
+          siteName: updatedBooking.siteName,
+          siteAddress: updatedBooking.siteAddress,
           status: 'booked',
-          scheduledDate: booking.scheduledDate,
-          co2eSaved: booking.estimatedCO2e,
+          scheduledDate: updatedBooking.scheduledDate,
+          co2eSaved: updatedBooking.estimatedCO2e,
           travelEmissions: travelEmissions, // Calculate from booking's round trip distance and preferred vehicle type
-          buybackValue: booking.estimatedBuyback,
-          charityPercent: booking.charityPercent,
+          buybackValue: updatedBooking.estimatedBuyback,
+          charityPercent: updatedBooking.charityPercent,
         });
 
         // Create job assets from booking assets
-        for (const bookingAsset of booking.assets) {
+        for (const bookingAsset of updatedBooking.assets) {
           await prisma.jobAsset.create({
             data: {
               jobId: job.id,
@@ -536,7 +561,7 @@ export class BookingService {
         });
 
         // Link job to booking
-        await bookingRepo.update(booking.id, {
+        await bookingRepo.update(updatedBooking.id, {
           jobId: job.id,
         });
       }

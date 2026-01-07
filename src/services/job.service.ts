@@ -150,12 +150,44 @@ export class JobService {
   }) {
     // Role-based filtering
     if (filters.userRole === 'admin') {
-      return jobRepo.findByTenant(filters.tenantId, {
-        status: filters.status,
-        clientName: filters.clientName,
-        searchQuery: filters.searchQuery,
-        limit: filters.limit,
-        offset: filters.offset,
+      // Admins should see all jobs across all tenants (no tenantId filter)
+      const where: any = {};
+      if (filters.status) {
+        where.status = filters.status;
+      }
+      if (filters.clientName) {
+        where.clientName = {
+          contains: filters.clientName,
+          mode: 'insensitive',
+        };
+      }
+      if (filters.searchQuery) {
+        where.OR = [
+          { clientName: { contains: filters.searchQuery, mode: 'insensitive' } },
+          { erpJobNumber: { contains: filters.searchQuery, mode: 'insensitive' } },
+          { siteName: { contains: filters.searchQuery, mode: 'insensitive' } },
+          { siteAddress: { contains: filters.searchQuery, mode: 'insensitive' } },
+        ];
+      }
+
+      return prisma.job.findMany({
+        where,
+        include: {
+          booking: {
+            include: { client: true },
+          },
+          assets: {
+            include: { category: true },
+          },
+          driver: {
+            include: {
+              driverProfile: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: filters.limit,
+        skip: filters.offset,
       });
     } else if (filters.userRole === 'driver') {
       // Drivers can see all their jobs (for history)
