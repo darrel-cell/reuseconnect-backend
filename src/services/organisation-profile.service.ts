@@ -4,6 +4,7 @@ import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../utils/errors';
 
 export interface OrganisationProfileData {
+  name: string;
   organisationName: string;
   registrationNumber: string;
   address: string;
@@ -38,6 +39,9 @@ export class OrganisationProfileService {
    */
   async upsertProfile(userId: string, data: OrganisationProfileData) {
     // Validate required fields
+    if (!data.name?.trim()) {
+      throw new ValidationError('Name is required');
+    }
     if (!data.organisationName?.trim()) {
       throw new ValidationError('Organisation name is required');
     }
@@ -73,6 +77,12 @@ export class OrganisationProfileService {
     if (user.role !== 'admin' && user.role !== 'reseller') {
       throw new ValidationError('Organisation profile is only available for admin and reseller roles');
     }
+
+    // Update user name
+    await prisma.user.update({
+      where: { id: userId },
+      data: { name: data.name.trim() },
+    });
 
     // Upsert profile
     const profile = await prisma.organisationProfile.upsert({

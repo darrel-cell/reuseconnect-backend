@@ -230,13 +230,13 @@ router.patch(
         } as ApiResponse);
       }
 
-      const { email, phone, organisationName, registrationNumber, address } = req.body;
+      const { name, email, phone, organisationName, registrationNumber, address } = req.body;
 
       // Validate required fields
-      if (!email || !phone || !organisationName || !registrationNumber || !address) {
+      if (!name || !email || !phone || !organisationName || !registrationNumber || !address) {
         return res.status(400).json({
           success: false,
-          error: 'Email, phone, organisation name, registration number, and address are required',
+          error: 'Name, email, phone, organisation name, registration number, and address are required',
         } as ApiResponse);
       }
 
@@ -264,6 +264,13 @@ router.patch(
         } as ApiResponse);
       }
 
+      // Update user name
+      const updatedUser = await prisma.user.update({
+        where: { id: req.user.userId },
+        data: { name: name.trim() },
+        select: { name: true },
+      });
+
       // Update client profile
       const updatedClient = await prisma.client.update({
         where: { id: client.id },
@@ -283,7 +290,7 @@ router.patch(
         success: true,
         data: {
           id: updatedClient.id,
-          name: updatedClient.name,
+          name: updatedUser.name, // Return updated user name
           email: updatedClient.email || '',
           phone: updatedClient.phone || '',
           organisationName: updatedClient.organisationName || '',

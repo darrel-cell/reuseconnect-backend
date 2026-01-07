@@ -141,13 +141,15 @@ export class DriverController {
       }
 
       const { id } = req.params;
-      const { vehicleReg, vehicleType, vehicleFuelType, phone } = req.body;
+      const { name, email, vehicleReg, vehicleType, vehicleFuelType, phone } = req.body;
 
       // Only admin can update other users' profiles
       // Drivers can update their own profile
       const targetUserId = req.user.role === 'admin' ? id : req.user.userId;
 
       const profile = await driverService.updateProfile(targetUserId, {
+        name,
+        email,
         vehicleReg,
         vehicleType,
         vehicleFuelType,

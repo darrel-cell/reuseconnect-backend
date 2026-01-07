@@ -199,6 +199,8 @@ export class DriverService {
   async updateProfile(
     userId: string,
     data: {
+      name?: string;
+      email?: string;
       vehicleReg?: string;
       vehicleType?: 'van' | 'truck' | 'car';
       vehicleFuelType?: 'petrol' | 'diesel' | 'electric';
@@ -211,10 +213,16 @@ export class DriverService {
 
     // If profile does not exist yet, create it instead of failing
     if (!profile) {
-      if (!data.vehicleReg || !data.vehicleType || !data.vehicleFuelType) {
+      if (!data.name || !data.email || !data.phone || !data.vehicleReg || !data.vehicleType || !data.vehicleFuelType) {
         throw new ValidationError(
-          'To create your driver profile, please provide vehicle registration, vehicle type, and fuel type.'
+          'To create your driver profile, please provide name, email, phone number, vehicle registration, vehicle type, and fuel type.'
         );
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(data.email.trim())) {
+        throw new ValidationError('Invalid email format');
       }
 
       const vehicleReg = data.vehicleReg.trim().toUpperCase();
@@ -232,12 +240,29 @@ export class DriverService {
         throw new ValidationError(`Invalid fuel type. Must be one of: ${validFuelTypes.join(', ')}`);
       }
 
+      // Update user name and email
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          name: data.name.trim(),
+          email: data.email.trim(),
+        },
+      });
+
       return driverRepo.createProfile(userId, {
         vehicleReg,
         vehicleType: data.vehicleType,
         vehicleFuelType: data.vehicleFuelType,
         phone: data.phone,
       });
+    }
+
+    // Validate required fields on update
+    if (data.name !== undefined && !data.name.trim()) {
+      throw new ValidationError('Name is required');
+    }
+    if (data.phone !== undefined && !data.phone.trim()) {
+      throw new ValidationError('Phone number is required');
     }
 
     // Validate if provided on update
@@ -258,6 +283,21 @@ export class DriverService {
     // Prevent placeholder vehicle registrations
     if (data.vehicleReg && data.vehicleReg.trim().toUpperCase() === 'TBD') {
       throw new ValidationError('Vehicle registration number cannot be a placeholder.');
+    }
+
+    // Update user name and email if provided
+    const userUpdateData: { name?: string; email?: string } = {};
+    if (data.name) {
+      userUpdateData.name = data.name.trim();
+    }
+    if (data.email) {
+      userUpdateData.email = data.email.trim();
+    }
+    if (Object.keys(userUpdateData).length > 0) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: userUpdateData,
+      });
     }
 
     return driverRepo.updateProfile(userId, {

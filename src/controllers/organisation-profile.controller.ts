@@ -50,9 +50,10 @@ export class OrganisationProfileController {
       }
 
       const { userId } = req.user;
-      const { organisationName, registrationNumber, address, email, phone } = req.body;
+      const { name, organisationName, registrationNumber, address, email, phone } = req.body;
 
       const data: OrganisationProfileData = {
+        name,
         organisationName,
         registrationNumber,
         address,
