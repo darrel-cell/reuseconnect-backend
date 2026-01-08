@@ -39,35 +39,17 @@ class EmailService {
         // Add private key if available (recommended for Node.js)
         if (config.email.privateKey && config.email.privateKey.trim() !== '') {
           initConfig.privateKey = config.email.privateKey;
-          console.log('[Email Service] EmailJS initialized with public and private keys');
+          // EmailJS initialized with public and private keys
         } else {
-          console.warn('[Email Service] EmailJS initialized with public key only');
-          console.warn('[Email Service] For Node.js/backend, enable "API calls for non-browser" in EmailJS dashboard');
-          console.warn('[Email Service] OR add EMAILJS_PRIVATE_KEY to .env for better security');
+          // EmailJS initialized with public key only
         }
         
         emailjs.init(initConfig);
-        console.log('[Email Service] EmailJS initialized successfully');
       } catch (initError) {
-        console.warn('[Email Service] EmailJS init warning:', initError);
         // Continue - we'll pass publicKey in send() method
       }
-      console.log('[Email Service] Config:', {
-        serviceId: config.email.serviceId.substring(0, 15) + '...',
-        templateId: config.email.templateId.substring(0, 15) + '...',
-        publicKey: config.email.publicKey.substring(0, 10) + '...',
-        publicKeyFullLength: config.email.publicKey.length,
-        publicKeyIsEmpty: config.email.publicKey.trim() === '',
-      });
     } else {
-      console.warn('[Email Service] EmailJS configuration missing. Email sending will be disabled.');
-      console.warn('[Email Service] Current config:', {
-        enabled: config.email.enabled,
-        hasServiceId: !!config.email.serviceId,
-        hasTemplateId: !!config.email.templateId,
-        hasPublicKey: !!config.email.publicKey,
-      });
-      console.warn('[Email Service] Set EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, and EMAILJS_PUBLIC_KEY in .env');
+      // EmailJS configuration missing
     }
   }
 
@@ -83,13 +65,7 @@ class EmailService {
    */
   async sendInviteEmail(params: SendInviteEmailParams): Promise<void> {
     if (!this.emailConfig) {
-      console.warn('[Email Service] EmailJS not configured. Skipping email send.');
-      console.warn('[Email Service] Config check:', {
-        enabled: config.email.enabled,
-        hasServiceId: !!config.email.serviceId,
-        hasTemplateId: !!config.email.templateId,
-        hasPublicKey: !!config.email.publicKey,
-      });
+      // EmailJS not configured, skipping email send
       return;
     }
 
@@ -103,12 +79,6 @@ class EmailService {
         expiresInDays = 14,
       } = params;
 
-      console.log('[Email Service] Attempting to send invitation email:', {
-        to: toEmail,
-        role,
-        tenantName,
-        inviterName,
-      });
 
       // Build invitation URL
       const inviteUrl = `${config.email.frontendUrl}/invite?token=${inviteToken}`;
@@ -135,25 +105,9 @@ class EmailService {
         app_name: tenantName,
       };
 
-      console.log('[Email Service] Sending email with params:', {
-        serviceId: this.emailConfig.serviceId,
-        templateId: this.emailConfig.templateId,
-        templateParams: {
-          ...templateParams,
-          invite_url: inviteUrl.substring(0, 50) + '...', // Log partial URL for security
-        },
-      });
-
       // Send email via EmailJS
       // EmailJS Node.js SDK v5: send(serviceId, templateId, templateParams, options)
       // Options must include publicKey
-      console.log('[Email Service] Calling emailjs.send with:', {
-        serviceId: this.emailConfig.serviceId,
-        templateId: this.emailConfig.templateId,
-        hasPublicKey: !!this.emailConfig.publicKey,
-        publicKeyPreview: this.emailConfig.publicKey ? this.emailConfig.publicKey.substring(0, 10) + '...' : 'MISSING',
-        publicKeyLength: this.emailConfig.publicKey ? this.emailConfig.publicKey.length : 0,
-      });
       
       // Verify publicKey is not empty
       if (!this.emailConfig.publicKey || this.emailConfig.publicKey.trim() === '') {
@@ -169,10 +123,6 @@ class EmailService {
       // Add private key if available (recommended for Node.js)
       if (config.email.privateKey && config.email.privateKey.trim() !== '') {
         sendOptions.privateKey = config.email.privateKey.trim();
-        console.log('[Email Service] Using private key for authentication');
-        console.log('[Email Service] Private key preview:', config.email.privateKey.substring(0, 10) + '...');
-      } else {
-        console.warn('[Email Service] No private key set - ensure "API calls for non-browser" is enabled in EmailJS dashboard');
       }
       
       const response = await emailjs.send(
@@ -182,11 +132,6 @@ class EmailService {
         sendOptions
       );
 
-      console.log('[Email Service] Invitation email sent successfully:', {
-        to: toEmail,
-        status: response.status,
-        text: response.text,
-      });
     } catch (error) {
       console.error('[Email Service] Failed to send invitation email:', error);
       console.error('[Email Service] Error details:', {

@@ -26,8 +26,6 @@ export type JobStatus =
   | 'completed' 
   | 'cancelled';
 
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
-export type CommissionStatus = 'pending' | 'approved' | 'paid';
 export type CertificateType = 
   | 'chain_of_custody' 
   | 'data_wipe' 

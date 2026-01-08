@@ -97,8 +97,6 @@ model Client {
   // Relations
   bookings   Booking[]
   sites      Site[]
-  invoices   Invoice[]
-  commissions Commission[]
 
   @@index([tenantId])
   @@index([resellerId])
@@ -196,14 +194,15 @@ model Booking {
   assets            BookingAsset[]
   statusHistory     BookingStatusHistory[]
   documents         Document[] @relation("BookingDocuments")
-  invoices          Invoice[]
-  commissions       Commission[]
 
   @@index([clientId])
   @@index([tenantId])
   @@index([status])
   @@index([scheduledDate])
   @@index([erpJobNumber])
+  @@index([clientId, status]) // Composite index for client booking queries
+  @@index([tenantId, scheduledDate]) // Composite index for tenant-based queries with date sorting
+  @@index([status, scheduledDate]) // Composite index for status-based queries with date sorting
 }
 
 enum BookingStatus {
@@ -266,6 +265,15 @@ model Job {
   charityPercent  Int      @default(0)
   driverId        String?
   driver          User?    @relation(fields: [driverId], references: [id])
+  // Driver journey fields (entered before starting journey in routed status)
+  dial2Collection String?  // DIAL 2 Collection: 1 Person, 2 or more persons, etc.
+  securityRequirements String?  // Security badge required at reception, etc.
+  idRequired      String?  // Yes - Photo ID required, etc.
+  loadingBayLocation String?  // Loading bay 3, rear entrance, etc.
+  vehicleHeightRestrictions String?  // Maximum height 3.5m, etc.
+  doorLiftSize    String?  // Standard loading bay doors, lift available, etc.
+  roadWorksPublicEvents String?  // None reported, etc.
+  manualHandlingRequirements String?  // Heavy items require two-person lift, etc.
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -277,6 +285,7 @@ model Job {
   co2Results      CO2Result[]
   buybackResults  BuybackResult[]
   financeStatus   FinanceStatus?
+  documents       Document[]
 
   @@index([bookingId])
   @@index([tenantId])
@@ -284,6 +293,9 @@ model Job {
   @@index([driverId])
   @@index([scheduledDate])
   @@index([erpJobNumber])
+  @@index([status, scheduledDate]) // Composite index for status-based queries with date sorting
+  @@index([driverId, status]) // Composite index for driver job queries
+  @@index([tenantId, createdAt]) // Composite index for tenant-based queries with date sorting
 }
 
 enum JobStatus {
@@ -478,6 +490,7 @@ model Document {
   tenantId    String
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   jobId       String?
+  job         Job?     @relation(fields: [jobId], references: [id])
   bookingId   String?
   booking     Booking? @relation("BookingDocuments", fields: [bookingId], references: [id])
   name        String
@@ -513,73 +526,6 @@ model Invite {
   @@index([email])
   @@index([token])
   @@index([tenantId])
-}
-
-// Invoices (ERP-owned, we track status)
-model Invoice {
-  id            String   @id @default(uuid())
-  invoiceNumber String   @unique
-  clientId      String
-  client        Client   @relation(fields: [clientId], references: [id])
-  bookingId     String?
-  booking       Booking? @relation(fields: [bookingId], references: [id])
-  jobId         String?
-  erpJobNumber  String?
-  issueDate     DateTime
-  dueDate       DateTime
-  amount        Float
-  status        InvoiceStatus @default(draft)
-  items         String   // JSON array of invoice items
-  subtotal      Float
-  tax           Float
-  total         Float
-  downloadUrl   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([clientId])
-  @@index([bookingId])
-  @@index([status])
-}
-
-enum InvoiceStatus {
-  draft
-  sent
-  paid
-  overdue
-  cancelled
-}
-
-// Commissions (for resellers)
-model Commission {
-  id              String   @id @default(uuid())
-  resellerId      String
-  resellerName    String
-  clientId        String
-  client          Client   @relation(fields: [clientId], references: [id])
-  bookingId       String?
-  booking         Booking? @relation(fields: [bookingId], references: [id])
-  jobId           String?
-  jobNumber       String?
-  bookingNumber   String?
-  commissionPercent Int
-  jobValue        Float
-  commissionAmount Float
-  status          CommissionStatus @default(pending)
-  period          String   // YYYY-MM
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([resellerId])
-  @@index([clientId])
-  @@index([status])
-  @@index([period])
-}
-
-enum CommissionStatus {
-  pending
-  approved
-  paid
 }
 
 // Notifications

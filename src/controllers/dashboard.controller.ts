@@ -22,8 +22,9 @@ export class DashboardController {
       // Get jobs based on role (include booking to access roundTripDistanceKm)
       let jobs: any[] = [];
       if (role === 'admin') {
+        // Admins should see all jobs across all tenants (no tenantId filter)
         jobs = await prisma.job.findMany({
-          where: { tenantId },
+          where: {}, // No tenantId filter - admin sees all jobs
           include: { booking: true },
         });
       } else if (role === 'driver') {

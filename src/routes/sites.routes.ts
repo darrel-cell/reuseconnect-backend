@@ -23,9 +23,9 @@ router.get(
       let sites;
 
       if (req.user.role === 'admin') {
-        // Admin sees all sites in their tenant
+        // Admin sees all sites across all tenants (no tenantId filter)
         sites = await prisma.site.findMany({
-          where: { tenantId: req.user.tenantId },
+          where: {}, // No tenantId filter - admin sees all sites
           include: {
             client: true,
           },
@@ -109,8 +109,8 @@ router.get(
         } as ApiResponse);
       }
 
-      // Check access - must belong to same tenant
-      if (site.tenantId !== req.user.tenantId) {
+      // Check access - admins can access any site, others must belong to same tenant
+      if (req.user.role !== 'admin' && site.tenantId !== req.user.tenantId) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
@@ -301,8 +301,8 @@ router.put(
         } as ApiResponse);
       }
 
-      // Check access
-      if (site.tenantId !== req.user.tenantId) {
+      // Check access - admins can access any site, others must belong to same tenant
+      if (req.user.role !== 'admin' && site.tenantId !== req.user.tenantId) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
@@ -391,8 +391,8 @@ router.delete(
         } as ApiResponse);
       }
 
-      // Check access
-      if (site.tenantId !== req.user.tenantId) {
+      // Check access - admins can access any site, others must belong to same tenant
+      if (req.user.role !== 'admin' && site.tenantId !== req.user.tenantId) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',

@@ -30,7 +30,10 @@ export async function createNotification(
     });
   } catch (error) {
     // Log error but don't throw - notifications are non-critical
-    console.error('Failed to create notification:', error);
+    const { logger } = await import('./logger');
+    logger.error('Failed to create notification', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }
 
@@ -62,7 +65,10 @@ export async function createNotificationsForUsers(
     );
   } catch (error) {
     // Log error but don't throw - notifications are non-critical
-    console.error('Failed to create notifications for users:', error);
+    const { logger } = await import('./logger');
+    logger.error('Failed to create notifications for users', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }
 

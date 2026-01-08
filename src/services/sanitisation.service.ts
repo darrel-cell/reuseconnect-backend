@@ -44,7 +44,6 @@ export class SanitisationService {
     });
 
     if (!job) {
-      console.log('[Sanitisation Service] No job found for booking:', bookingId);
       return [];
     }
 
@@ -52,10 +51,6 @@ export class SanitisationService {
     const sanitisedAssets = job.assets.filter(asset => asset.sanitised);
 
     if (sanitisedAssets.length === 0) {
-      console.log('[Sanitisation Service] Job found but no sanitised assets for booking:', bookingId, {
-        totalAssets: job.assets.length,
-        assets: job.assets.map(a => ({ id: a.id, categoryId: a.categoryId, sanitised: a.sanitised, wipeMethod: a.wipeMethod })),
-      });
       return [];
     }
 
@@ -74,11 +69,6 @@ export class SanitisationService {
       notes: undefined,
     }));
 
-    console.log('[Sanitisation Service] Returning sanitisation records:', {
-      bookingId,
-      recordCount: records.length,
-      records: records.map(r => ({ id: r.id, assetId: r.assetId, method: r.method })),
-    });
 
     return records;
   }

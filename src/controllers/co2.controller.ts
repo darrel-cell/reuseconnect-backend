@@ -53,7 +53,10 @@ export class CO2Controller {
         data: result,
       } as ApiResponse);
     } catch (error) {
-      console.error('Error calculating CO2e:', error);
+      const { logger } = await import('../utils/logger');
+      logger.error('Error calculating CO2e', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       return res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to calculate CO2e',

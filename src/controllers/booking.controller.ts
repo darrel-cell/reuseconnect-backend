@@ -132,21 +132,27 @@ export class BookingController {
         } as ApiResponse);
       }
 
-      const bookings = await bookingService.getBookings({
+      // Parse pagination parameters with defaults
+      const page = req.query.page ? Math.max(1, parseInt(req.query.page as string)) : 1;
+      const limit = req.query.limit ? Math.min(100, Math.max(1, parseInt(req.query.limit as string))) : 20; // Default 20, max 100
+      const offset = (page - 1) * limit;
+
+      const result = await bookingService.getBookings({
         tenantId: req.user.tenantId,
         userId: req.user.userId,
         userRole: req.user.role,
         clientId: req.query.clientId as string,
         resellerId: req.query.resellerId as string,
         status: req.query.status as any,
-        limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
-        offset: req.query.offset ? parseInt(req.query.offset as string) : undefined,
+        limit,
+        offset,
       });
 
-      const transformedBookings = transformBookingsForAPI(bookings as any[]);
+      const transformedBookings = transformBookingsForAPI(result.data as any[]);
       return res.json({
         success: true,
         data: transformedBookings,
+        pagination: result.pagination,
       } as ApiResponse);
     } catch (error) {
       return next(error);
@@ -263,6 +269,36 @@ export class BookingController {
       return res.json({
         success: true,
         data: transformedBooking,
+      } as ApiResponse);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async checkJobIdUnique(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized',
+        } as ApiResponse);
+      }
+
+      const { erpJobNumber } = req.query;
+      const { id: bookingId } = req.params; // Optional booking ID to exclude from check
+
+      if (!erpJobNumber || typeof erpJobNumber !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Job ID (erpJobNumber) is required',
+        } as ApiResponse);
+      }
+
+      const isUnique = await bookingService.isJobIdUnique(erpJobNumber, bookingId);
+
+      return res.json({
+        success: true,
+        data: { isUnique, erpJobNumber: erpJobNumber.trim() },
       } as ApiResponse);
     } catch (error) {
       return next(error);

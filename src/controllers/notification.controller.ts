@@ -22,9 +22,15 @@ export class NotificationController {
       const { read, limit, offset } = req.query;
       const readFilter = read === 'true' ? true : read === 'false' ? false : undefined;
 
+      // Admins and drivers can see notifications across all tenants
+      // (drivers may be assigned jobs from clients in different tenants)
+      // So don't filter by tenantId for admin or driver roles
+      const tenantFilter =
+        req.user.role === 'admin' || req.user.role === 'driver' ? undefined : req.user.tenantId;
+
       const result = await notificationService.getNotifications(
         req.user.userId,
-        req.user.tenantId,
+        tenantFilter,
         {
           read: readFilter,
           limit: limit ? parseInt(limit as string) : undefined,
@@ -32,14 +38,14 @@ export class NotificationController {
         }
       );
 
-      // Debug logging
-      console.log('[Notification Controller] Fetching notifications:', {
+      // Log notification fetch (debug level)
+      const { logger } = await import('../utils/logger');
+      logger.debug('Fetching notifications', {
+        requestId: req.id,
         userId: req.user.userId,
         userRole: req.user.role,
         tenantId: req.user.tenantId,
         readFilter,
-        limit,
-        offset,
         notificationsFound: result.notifications.length,
         total: result.total,
       });
@@ -81,7 +87,16 @@ export class NotificationController {
         } as ApiResponse);
       }
 
-      const count = await notificationService.getUnreadCount(req.user.userId, req.user.tenantId);
+      // Admins and drivers can see notifications across all tenants
+      // (drivers may be assigned jobs from clients in different tenants)
+      // So don't filter by tenantId for admin or driver roles
+      const tenantFilter =
+        req.user.role === 'admin' || req.user.role === 'driver' ? undefined : req.user.tenantId;
+
+      const count = await notificationService.getUnreadCount(
+        req.user.userId,
+        tenantFilter
+      );
 
       res.json({
         success: true,
@@ -143,7 +158,14 @@ export class NotificationController {
         } as ApiResponse);
       }
 
-      const result = await notificationService.markAllAsRead(req.user.userId);
+      // For non-admin/non-driver roles, filter by tenantId
+      // (admins and drivers can see notifications across all tenants)
+      const tenantFilter = 
+        req.user.role === 'admin' || req.user.role === 'driver' 
+          ? undefined 
+          : req.user.tenantId;
+
+      const result = await notificationService.markAllAsRead(req.user.userId, tenantFilter);
 
       res.json({
         success: true,

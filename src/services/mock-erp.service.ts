@@ -72,7 +72,6 @@ class MockERPService {
     await new Promise(resolve => setTimeout(resolve, 300));
 
     // In real implementation, this would POST to ERP API
-    console.log(`[Mock ERP] Syncing inventory for job ${jobNumber}:`, assets);
   }
 
   /**

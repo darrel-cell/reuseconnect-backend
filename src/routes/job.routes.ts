@@ -36,4 +36,11 @@ router.patch(
   jobController.updateEvidence.bind(jobController)
 );
 
+// Update driver journey fields (driver only, for routed status)
+router.patch(
+  '/:id/journey-fields',
+  authorize('admin', 'driver'),
+  jobController.updateJourneyFields.bind(jobController)
+);
+
 export default router;

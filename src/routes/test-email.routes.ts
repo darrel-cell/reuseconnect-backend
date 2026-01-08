@@ -50,7 +50,10 @@ router.post('/test', async (req, res) => {
       message: `Test email sent to ${email}`,
     });
   } catch (error) {
-    console.error('[Test Email Route] Error:', error);
+    const { logger } = await import('../utils/logger');
+    logger.error('Test email route error', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

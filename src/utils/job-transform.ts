@@ -41,6 +41,15 @@ export interface TransformedJob {
   charityPercent: number;
   roundTripDistanceKm?: number | null; // From booking
   roundTripDistanceMiles?: number | null; // From booking
+  // Driver journey fields (entered before starting journey in routed status)
+  dial2Collection?: string | null;
+  securityRequirements?: string | null;
+  idRequired?: string | null;
+  loadingBayLocation?: string | null;
+  vehicleHeightRestrictions?: string | null;
+  doorLiftSize?: string | null;
+  roadWorksPublicEvents?: string | null;
+  manualHandlingRequirements?: string | null;
   evidence?: Array<{
     status: string; // Status for which this evidence was submitted
     photos: string[];
@@ -126,28 +135,23 @@ export function transformJobForAPI(job: any): TransformedJob {
     charityPercent: job.charityPercent || 0,
     roundTripDistanceKm: job.booking?.roundTripDistanceKm ?? null,
     roundTripDistanceMiles: job.booking?.roundTripDistanceMiles ?? null,
+    dial2Collection: job.dial2Collection ?? null,
+    securityRequirements: job.securityRequirements ?? null,
+    idRequired: job.idRequired ?? null,
+    loadingBayLocation: job.loadingBayLocation ?? null,
+    vehicleHeightRestrictions: job.vehicleHeightRestrictions ?? null,
+    doorLiftSize: job.doorLiftSize ?? null,
+    roadWorksPublicEvents: job.roadWorksPublicEvents ?? null,
+    manualHandlingRequirements: job.manualHandlingRequirements ?? null,
     evidence: (() => {
-      // Debug: Log raw evidence data - ALWAYS log to help diagnose
-      console.log('[Evidence Transform] Job ID:', job.id);
-      console.log('[Evidence Transform] Raw evidence from DB:', {
-        isArray: Array.isArray(job.evidence),
-        length: Array.isArray(job.evidence) ? job.evidence.length : 'N/A',
-        type: typeof job.evidence,
-        value: job.evidence,
-      });
-      
       // Check if evidence exists and is an array
       if (!job.evidence) {
-        console.log('[Evidence Transform] No evidence property on job');
         return null;
       }
       
       if (!Array.isArray(job.evidence)) {
-        console.log('[Evidence Transform] Evidence is not an array:', typeof job.evidence);
-        console.log('[Evidence Transform] Evidence value:', job.evidence);
         // If evidence is a single object (shouldn't happen but handle it), convert to array
         if (job.evidence && typeof job.evidence === 'object') {
-          console.log('[Evidence Transform] Converting single evidence object to array');
           return [job.evidence].map((ev: any) => {
             const photos = Array.isArray(ev.photos) 
               ? ev.photos.filter((p: any) => p && typeof p === 'string' && p.trim().length > 0)
@@ -169,24 +173,11 @@ export function transformJobForAPI(job: any): TransformedJob {
       }
       
       if (job.evidence.length === 0) {
-        console.log('[Evidence Transform] Evidence array is empty');
         return []; // Return empty array instead of null if evidence array exists but is empty
       }
       
-      console.log('[Evidence Transform] Processing', job.evidence.length, 'evidence records');
-      
       // Process each evidence record - don't filter out records, just clean the data
-      return job.evidence.map((ev: any, index: number) => {
-        console.log(`[Evidence Transform] Processing evidence ${index + 1}:`, {
-          id: ev.id,
-          status: ev.status,
-          photosCount: Array.isArray(ev.photos) ? ev.photos.length : 0,
-          hasSignature: !!ev.signature,
-          sealNumbersCount: Array.isArray(ev.sealNumbers) ? ev.sealNumbers.length : 0,
-          hasNotes: !!ev.notes,
-          raw: ev,
-        });
-        
+      return job.evidence.map((ev: any) => {
         // Ensure photos is always an array, filter out empty strings
         const photos = Array.isArray(ev.photos) 
           ? ev.photos.filter((p: any) => p && typeof p === 'string' && p.trim().length > 0)
@@ -197,7 +188,7 @@ export function transformJobForAPI(job: any): TransformedJob {
           ? ev.sealNumbers.filter((s: any) => s && typeof s === 'string' && s.trim().length > 0)
           : [];
         
-        const transformed = {
+        return {
           status: transformStatus(ev.status),
           photos: photos,
           signature: (ev.signature && typeof ev.signature === 'string' && ev.signature.trim().length > 0) ? ev.signature : null,
@@ -205,10 +196,6 @@ export function transformJobForAPI(job: any): TransformedJob {
           notes: (ev.notes && typeof ev.notes === 'string' && ev.notes.trim().length > 0) ? ev.notes : null,
           createdAt: ev.createdAt instanceof Date ? ev.createdAt.toISOString() : ev.createdAt,
         };
-        
-        console.log(`[Evidence Transform] Transformed evidence ${index + 1}:`, transformed);
-        
-        return transformed;
       });
     })(),
     certificates: (job.certificates || []).map((cert: any) => ({

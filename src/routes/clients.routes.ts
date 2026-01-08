@@ -25,7 +25,7 @@ router.get(
       
       if (req.user.role === 'admin') {
         // Admins see all clients across all tenants (no tenantId filter)
-        // No additional filtering needed
+        // No additional filtering needed - empty where clause means all clients
       } else if (req.user.role === 'reseller') {
         // Resellers only see clients they invited (filtered by resellerId)
         // Also filter by tenantId for resellers (they work within their tenant)
@@ -38,22 +38,53 @@ router.get(
         where.status = req.query.status;
       }
 
-      const clients = await prisma.client.findMany({
-        where,
-        include: {
-          tenant: true,
-          bookings: {
-            take: 5,
-            orderBy: { createdAt: 'desc' },
-          },
-          _count: {
-            select: {
-              bookings: true,
+      // Search query filter
+      if (req.query.searchQuery) {
+        where.OR = [
+          { name: { contains: req.query.searchQuery as string, mode: 'insensitive' } },
+          { email: { contains: req.query.searchQuery as string, mode: 'insensitive' } },
+          { organisationName: { contains: req.query.searchQuery as string, mode: 'insensitive' } },
+        ];
+      }
+
+      // Parse pagination parameters with defaults
+      const page = req.query.page ? Math.max(1, parseInt(req.query.page as string)) : 1;
+      const limit = req.query.limit ? Math.min(100, Math.max(1, parseInt(req.query.limit as string))) : 20; // Default 20, max 100
+      const offset = (page - 1) * limit;
+
+      // Get clients with pagination
+      const [clients, total] = await Promise.all([
+        prisma.client.findMany({
+          where,
+          select: {
+            id: true,
+            name: true,
+            organisationName: true,
+            tenantId: true,
+            email: true,
+            phone: true,
+            resellerId: true,
+            resellerName: true,
+            status: true,
+            createdAt: true,
+            tenant: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            _count: {
+              select: {
+                bookings: true,
+              },
             },
           },
-        },
-        orderBy: { name: 'asc' },
-      });
+          orderBy: { name: 'asc' },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.client.count({ where }),
+      ]);
 
       // Transform clients to match frontend interface
       const transformedClients = clients.map(client => ({
@@ -77,6 +108,12 @@ router.get(
       return res.json({
         success: true,
         data: transformedClients,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
       } as ApiResponse);
     } catch (error) {
       return next(error);

@@ -65,7 +65,6 @@ export class GradingService {
     });
 
     if (!job) {
-      console.log('[Grading Service] No job found for booking:', bookingId);
       return [];
     }
 
@@ -73,10 +72,6 @@ export class GradingService {
     const gradedAssets = job.assets.filter(asset => asset.grade !== null);
 
     if (gradedAssets.length === 0) {
-      console.log('[Grading Service] Job found but no graded assets for booking:', bookingId, {
-        totalAssets: job.assets.length,
-        assets: job.assets.map(a => ({ id: a.id, categoryId: a.categoryId, grade: a.grade, resaleValue: a.resaleValue })),
-      });
       return [];
     }
 
@@ -94,11 +89,6 @@ export class GradingService {
       condition: undefined,
     }));
 
-    console.log('[Grading Service] Returning grading records:', {
-      bookingId,
-      recordCount: records.length,
-      records: records.map(r => ({ id: r.id, assetId: r.assetId, grade: r.grade, resaleValue: r.resaleValue })),
-    });
 
     return records;
   }
@@ -151,8 +141,9 @@ export class GradingService {
     // PRIORITY: Use database avgBuybackValue first (most reliable)
     let baseValue = 0;
     
-    // Debug: Log what we have
-    console.log('[Grading Service] Category info:', {
+    // Log category info (debug level)
+    const { logger } = await import('../utils/logger');
+    logger.debug('Grading category info', {
       assetCategory,
       jobAssetCategoryName: jobAsset.categoryName,
       categoryId: jobAsset.categoryId,
@@ -165,7 +156,7 @@ export class GradingService {
     // This is the PRIMARY source - database values are most reliable
     if (jobAsset.category && jobAsset.category.avgBuybackValue != null && jobAsset.category.avgBuybackValue > 0) {
       baseValue = jobAsset.category.avgBuybackValue;
-      console.log('[Grading Service] Using avgBuybackValue from database:', {
+      logger.debug('Using avgBuybackValue from database', {
         categoryName: jobAsset.category.name,
         avgBuybackValue: baseValue,
       });
@@ -178,7 +169,7 @@ export class GradingService {
       
       if (category && category.avgBuybackValue && category.avgBuybackValue > 0) {
         baseValue = category.avgBuybackValue;
-        console.log('[Grading Service] Fetched avgBuybackValue directly from database:', {
+        logger.debug('Fetched avgBuybackValue directly from database', {
           categoryName: category.name,
           avgBuybackValue: baseValue,
         });
@@ -190,13 +181,11 @@ export class GradingService {
       // Use the category name from the job asset (more reliable than the parameter)
       const categoryNameToMatch = (jobAsset.categoryName || jobAsset.category?.name || assetCategory).toLowerCase().trim();
       
-      console.log('[Grading Service] Attempting to match category name:', categoryNameToMatch);
       
       // First, try exact match (case-insensitive)
       for (const [key, value] of Object.entries(baseResaleValues)) {
         if (categoryNameToMatch === key.toLowerCase()) {
           baseValue = value;
-          console.log('[Grading Service] Matched category name exactly:', { categoryNameToMatch, key, baseValue });
           break;
         }
       }
@@ -208,7 +197,6 @@ export class GradingService {
           // Check if category name contains the key or vice versa
           if (categoryNameToMatch.includes(keyLower) || keyLower.includes(categoryNameToMatch)) {
             baseValue = value;
-            console.log('[Grading Service] Matched category name partially:', { categoryNameToMatch, key, baseValue });
             break;
           }
         }
@@ -221,7 +209,6 @@ export class GradingService {
           const keyLower = key.toLowerCase();
           if (categoryWords.some(word => word === keyLower || word.includes(keyLower) || keyLower.includes(word))) {
             baseValue = value;
-            console.log('[Grading Service] Matched category name by word:', { categoryNameToMatch, key, baseValue });
             break;
           }
         }
@@ -229,24 +216,14 @@ export class GradingService {
     }
     
     // If still no match, default to 0 (will result in 0 resale value)
-    if (baseValue === 0) {
-      console.error('[Grading Service] No base value found for category:', {
-        assetCategory,
-        jobAssetCategoryName: jobAsset.categoryName,
-        categoryName: jobAsset.category?.name,
-        categoryId: jobAsset.categoryId,
-        avgBuybackValue: jobAsset.category?.avgBuybackValue,
-        availableCategories: Object.keys(baseResaleValues),
-      });
-    }
     
     const multiplier = gradeMultipliers[grade] || 0;
     const resaleValuePerUnit = Math.round(baseValue * multiplier);
     const totalResaleValue = resaleValuePerUnit * jobAsset.quantity;
     
-    // Debug logging
+    // Log resale value calculation (debug level)
     const categoryNameToMatchForLog = (jobAsset.categoryName || jobAsset.category?.name || assetCategory).toLowerCase().trim();
-    console.log('[Grading Service] Resale value calculation:', {
+    logger.debug('Resale value calculation', {
       assetCategory,
       categoryNameToMatch: categoryNameToMatchForLog,
       jobAssetCategoryName: jobAsset.categoryName,
@@ -314,10 +291,6 @@ export class GradingService {
     
     if (categoryRecord && categoryRecord.avgBuybackValue && categoryRecord.avgBuybackValue > 0) {
       baseValue = categoryRecord.avgBuybackValue;
-      console.log('[Grading Service] calculateResaleValue - Using database value:', {
-        categoryName: categoryRecord.name,
-        avgBuybackValue: baseValue,
-      });
     } else {
       // Fallback to hardcoded values if category not found in database
       const categoryLower = category.toLowerCase().trim();
@@ -331,11 +304,6 @@ export class GradingService {
           const keyLower = key.toLowerCase();
           if (categoryLower.includes(keyLower) || keyLower.includes(categoryLower)) {
             baseValue = value;
-            console.log('[Grading Service] calculateResaleValue - Matched hardcoded value:', {
-              category,
-              key,
-              baseValue,
-            });
             break;
           }
         }
@@ -348,34 +316,17 @@ export class GradingService {
           const keyLower = key.toLowerCase();
           if (categoryWords.some(word => word === keyLower || word.includes(keyLower) || keyLower.includes(word))) {
             baseValue = value;
-            console.log('[Grading Service] calculateResaleValue - Matched by word:', {
-              category,
-              key,
-              baseValue,
-            });
             break;
           }
         }
       }
       
-      if (baseValue === 0) {
-        console.warn('[Grading Service] calculateResaleValue - No value found for category:', category);
-      }
     }
     
     const multiplier = gradeMultipliers[grade] || 0;
     const resaleValuePerUnit = Math.round(baseValue * multiplier);
     const totalResaleValue = resaleValuePerUnit * quantity;
     
-    console.log('[Grading Service] calculateResaleValue - Final calculation:', {
-      category,
-      grade,
-      quantity,
-      baseValue,
-      multiplier,
-      resaleValuePerUnit,
-      totalResaleValue,
-    });
     
     return totalResaleValue;
   }

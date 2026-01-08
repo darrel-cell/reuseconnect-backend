@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { JobService } from '../services/job.service';
 import { AuthenticatedRequest, ApiResponse } from '../types';
 import { transformJobForAPI, transformJobsForAPI } from '../utils/job-transform';
+import { validateBase64Images, validateBase64Image } from '../utils/file-validation';
+import { logger } from '../utils/logger';
 
 const jobService = new JobService();
 
@@ -10,64 +12,7 @@ export class JobController {
     try {
       const { id } = req.params;
       const job = await jobService.getJobById(id);
-      
-      // Debug: Log raw job data before transformation
-      console.log('[Job Controller] Raw job from DB:', {
-        id: job.id,
-        hasEvidence: !!job.evidence,
-        evidenceType: typeof job.evidence,
-        evidenceIsArray: Array.isArray(job.evidence),
-        evidenceLength: Array.isArray(job.evidence) ? job.evidence.length : 'N/A',
-        evidenceValue: job.evidence,
-      });
-      
-      // Debug: Log each evidence record if it's an array
-      if (Array.isArray(job.evidence)) {
-        console.log('[Job Controller] Evidence records count:', job.evidence.length);
-        job.evidence.forEach((ev: any, idx: number) => {
-          console.log(`[Job Controller] Evidence ${idx + 1}:`, {
-            id: ev.id,
-            status: ev.status,
-            photosCount: Array.isArray(ev.photos) ? ev.photos.length : 0,
-            photos: Array.isArray(ev.photos) ? ev.photos.slice(0, 2).map((p: string) => p.substring(0, 50) + '...') : 'not array',
-            hasSignature: !!ev.signature,
-            signature: ev.signature ? ev.signature.substring(0, 50) + '...' : 'none',
-            sealNumbersCount: Array.isArray(ev.sealNumbers) ? ev.sealNumbers.length : 0,
-            hasNotes: !!ev.notes,
-          });
-        });
-      } else if (job.evidence) {
-        console.log('[Job Controller] Evidence is NOT an array, it is:', typeof job.evidence, job.evidence);
-      }
-      
       const transformedJob = transformJobForAPI(job as any);
-      
-      // Debug: Log transformed job
-      console.log('[Job Controller] Transformed job:', {
-        id: transformedJob.id,
-        hasEvidence: !!transformedJob.evidence,
-        evidenceType: typeof transformedJob.evidence,
-        evidenceIsArray: Array.isArray(transformedJob.evidence),
-        evidenceLength: Array.isArray(transformedJob.evidence) ? transformedJob.evidence.length : 'N/A',
-        evidenceValue: transformedJob.evidence,
-      });
-      
-      // Debug: Log each transformed evidence record if it's an array
-      if (Array.isArray(transformedJob.evidence)) {
-        console.log('[Job Controller] Transformed evidence records count:', transformedJob.evidence.length);
-        transformedJob.evidence.forEach((ev: any, idx: number) => {
-          console.log(`[Job Controller] Transformed evidence ${idx + 1}:`, {
-            status: ev.status,
-            photosCount: Array.isArray(ev.photos) ? ev.photos.length : 0,
-            hasSignature: !!ev.signature,
-            sealNumbersCount: Array.isArray(ev.sealNumbers) ? ev.sealNumbers.length : 0,
-            hasNotes: !!ev.notes,
-            createdAt: ev.createdAt,
-          });
-        });
-      } else if (transformedJob.evidence) {
-        console.log('[Job Controller] Transformed evidence is NOT an array, it is:', typeof transformedJob.evidence, transformedJob.evidence);
-      }
       
       res.json({
         success: true,
@@ -87,21 +32,28 @@ export class JobController {
         } as ApiResponse);
       }
 
-      const jobs = await jobService.getJobs({
+      // Parse pagination parameters with defaults
+      const page = req.query.page ? Math.max(1, parseInt(req.query.page as string)) : 1;
+      const limit = req.query.limit ? Math.min(100, Math.max(1, parseInt(req.query.limit as string))) : 20; // Default 20, max 100
+      const offset = (page - 1) * limit;
+
+      const result = await jobService.getJobs({
         tenantId: req.user.tenantId,
         userId: req.user.userId,
         userRole: req.user.role,
         status: req.query.status as any,
         clientName: req.query.clientName as string,
         searchQuery: req.query.searchQuery as string,
-        limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
-        offset: req.query.offset ? parseInt(req.query.offset as string) : undefined,
+        limit,
+        offset,
       });
 
-      const transformedJobs = transformJobsForAPI(jobs as any[]);
+      const transformedJobs = transformJobsForAPI(result.data as any[]);
+      
       res.json({
         success: true,
         data: transformedJobs,
+        pagination: result.pagination,
       } as ApiResponse);
     } catch (error) {
       next(error);
@@ -165,24 +117,6 @@ export class JobController {
       const evidenceData = req.body.evidence || req.body;
       const { photos, signature, sealNumbers, notes, status } = evidenceData;
 
-      // Debug: Log incoming evidence data
-      console.log('[Evidence Controller] Received evidence data:', {
-        jobId: id,
-        bodyStructure: Object.keys(req.body),
-        hasEvidenceKey: !!req.body.evidence,
-        evidenceData: evidenceData,
-        photosCount: Array.isArray(photos) ? photos.length : 0,
-        photos: photos,
-        hasSignature: !!signature,
-        signature: signature ? 'present' : 'missing',
-        sealNumbersCount: Array.isArray(sealNumbers) ? sealNumbers.length : 0,
-        sealNumbers: sealNumbers,
-        hasNotes: !!notes,
-        notes: notes,
-        status: status,
-        fullBody: req.body,
-      });
-
       // Convert frontend status format to backend format
       let evidenceStatus = status;
       if (evidenceStatus === 'en-route') {
@@ -196,6 +130,38 @@ export class JobController {
         } as ApiResponse);
       }
 
+      // Validate file uploads
+      if (photos && Array.isArray(photos) && photos.length > 0) {
+        try {
+          validateBase64Images(photos, 'photos', 10);
+        } catch (error) {
+          return res.status(400).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Invalid photo data',
+          } as ApiResponse);
+        }
+      }
+
+      if (signature && typeof signature === 'string' && signature.trim().length > 0) {
+        try {
+          validateBase64Image(signature, 'signature');
+        } catch (error) {
+          return res.status(400).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Invalid signature data',
+          } as ApiResponse);
+        }
+      }
+
+      logger.debug('Evidence submission', {
+        requestId: req.id,
+        jobId: id,
+        status: evidenceStatus,
+        photosCount: Array.isArray(photos) ? photos.length : 0,
+        hasSignature: !!signature,
+        sealNumbersCount: Array.isArray(sealNumbers) ? sealNumbers.length : 0,
+      });
+
       const job = await jobService.updateEvidence(id, {
         photos,
         signature,
@@ -203,6 +169,48 @@ export class JobController {
         notes,
         status: evidenceStatus,
         uploadedBy: req.user.userId,
+      });
+
+      const transformedJob = transformJobForAPI(job as any);
+      res.json({
+        success: true,
+        data: transformedJob,
+      } as ApiResponse);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateJourneyFields(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized',
+        } as ApiResponse);
+      }
+
+      const { id } = req.params;
+      const {
+        dial2Collection,
+        securityRequirements,
+        idRequired,
+        loadingBayLocation,
+        vehicleHeightRestrictions,
+        doorLiftSize,
+        roadWorksPublicEvents,
+        manualHandlingRequirements,
+      } = req.body;
+
+      const job = await jobService.updateJourneyFields(id, {
+        dial2Collection,
+        securityRequirements,
+        idRequired,
+        loadingBayLocation,
+        vehicleHeightRestrictions,
+        doorLiftSize,
+        roadWorksPublicEvents,
+        manualHandlingRequirements,
       });
 
       const transformedJob = transformJobForAPI(job as any);

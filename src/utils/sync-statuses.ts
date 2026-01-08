@@ -49,7 +49,6 @@ function mapBookingStatusToJobStatus(bookingStatus: BookingStatus, currentJobSta
  * Sync all booking and job statuses
  */
 export async function syncAllStatuses() {
-  console.log('Starting status sync...');
   
   // Get all jobs with their bookings
   const jobs = await prisma.job.findMany({
@@ -103,10 +102,10 @@ export async function syncAllStatuses() {
 
         updated = true;
         syncedCount++;
-        console.log(`Synced booking ${booking.bookingNumber}: ${booking.status} -> ${targetBookingStatus} (from job ${job.erpJobNumber}: ${job.status})`);
+        // Synced booking status
       } else {
         skippedCount++;
-        console.log(`Skipped booking ${booking.bookingNumber}: Invalid transition from ${booking.status} to ${targetBookingStatus}`);
+        // Skipped invalid transition
       }
     }
 
@@ -136,16 +135,15 @@ export async function syncAllStatuses() {
           });
 
           syncedCount++;
-          console.log(`Synced job ${job.erpJobNumber}: ${job.status} -> ${targetJobStatus} (from booking ${booking.bookingNumber}: ${booking.status})`);
+          // Synced job status
         } else {
           skippedCount++;
-          console.log(`Skipped job ${job.erpJobNumber}: Invalid transition from ${job.status} to ${targetJobStatus}`);
+          // Skipped invalid transition
         }
       }
     }
   }
 
-  console.log(`Status sync completed. Synced: ${syncedCount}, Skipped: ${skippedCount}`);
   return { syncedCount, skippedCount };
 }
 

@@ -22,6 +22,13 @@ router.get(
   bookingController.list.bind(bookingController)
 );
 
+// Check if Job ID is unique (admin only) - must be before /:id route
+router.get(
+  '/:id/check-job-id',
+  requireAdmin,
+  bookingController.checkJobIdUnique.bind(bookingController)
+);
+
 // Get booking by ID
 router.get(
   '/:id',

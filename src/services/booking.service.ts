@@ -5,7 +5,7 @@ import { JobRepository } from '../repositories/job.repository';
 import { CO2Service } from './co2.service';
 import { mockERPService } from './mock-erp.service';
 import { isValidBookingTransition, isValidJobTransition } from '../middleware/workflow';
-import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors';
+import { ValidationError, NotFoundError } from '../utils/errors';
 import { BookingStatus, JobStatus } from '../types';
 import { calculateTravelEmissions } from '../utils/co2';
 import { config } from '../config/env';
@@ -204,7 +204,8 @@ export class BookingService {
 
     // Notify client of booking creation (pending approval)
     const { createNotification } = await import('../utils/notifications');
-    console.log('[Booking Service] Creating notification for user:', {
+    const { logger } = await import('../utils/logger');
+    logger.debug('Creating notification for user', {
       userId: clientUserId,
       tenantId: data.tenantId,
       bookingId: booking.id,
@@ -220,7 +221,7 @@ export class BookingService {
       booking.id,
       'booking'
     );
-    console.log('[Booking Service] Notification created successfully');
+    logger.debug('Notification created successfully');
 
     // If booking is linked to a reseller (and the reseller is not the creator),
     // notify the reseller that a new booking has been submitted for their client.
@@ -240,22 +241,32 @@ export class BookingService {
     }
 
     // Notify admins of new booking requiring approval
+    // Admins should see all bookings across all tenants, so notify all admins
     const adminUsers = await prisma.user.findMany({
       where: {
-        tenantId: data.tenantId,
         role: 'admin',
         status: 'active',
+        // Remove tenantId filter - admins see all bookings across all tenants
       },
       select: { id: true },
     });
     if (adminUsers.length > 0) {
       const { notifyPendingApproval } = await import('../utils/notifications');
+      logger.info('Notifying admins of pending approval', {
+        bookingId: booking.id,
+        bookingNumber: booking.bookingNumber,
+        adminCount: adminUsers.length,
+        adminIds: adminUsers.map(u => u.id),
+      });
       await notifyPendingApproval(
         booking.id,
         booking.bookingNumber,
         adminUsers.map(u => u.id),
         data.tenantId
       );
+      // Notifications sent successfully
+    } else {
+      // No admin users found to notify
     }
 
     // Call Mock ERP to get job number
@@ -276,7 +287,8 @@ export class BookingService {
           erpJobNumber: erpResponse.jobNumber,
         });
       } catch (error) {
-        console.error('Failed to create ERP job:', error);
+        const { logError } = await import('../utils/logger');
+        logError('Failed to create ERP job', error, { bookingId: booking.id });
         // Continue without ERP job number
       }
     }
@@ -319,62 +331,267 @@ export class BookingService {
         where.clientId = filters.clientId;
       }
 
-      return prisma.booking.findMany({
-        where,
-        include: {
-          client: true,
-          site: true,
-          assets: {
-            include: { category: true },
+      const limit = filters.limit || 20;
+      const offset = filters.offset || 0;
+
+      const [data, total] = await Promise.all([
+        prisma.booking.findMany({
+          where,
+          select: {
+            id: true,
+            bookingNumber: true,
+            clientId: true,
+            tenantId: true,
+            siteId: true,
+            siteName: true,
+            siteAddress: true,
+            postcode: true,
+            lat: true,
+            lng: true,
+            scheduledDate: true,
+            status: true,
+            charityPercent: true,
+            estimatedCO2e: true,
+            estimatedBuyback: true,
+            preferredVehicleType: true,
+            roundTripDistanceKm: true,
+            roundTripDistanceMiles: true,
+            erpJobNumber: true,
+            jobId: true,
+            resellerId: true,
+            resellerName: true,
+            createdBy: true,
+            scheduledBy: true,
+            driverId: true,
+            driverName: true,
+            createdAt: true,
+            updatedAt: true,
+            scheduledAt: true,
+            collectedAt: true,
+            sanitisedAt: true,
+            gradedAt: true,
+            completedAt: true,
+            client: {
+              select: {
+                id: true,
+                name: true,
+                organisationName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            site: {
+              select: {
+                id: true,
+                name: true,
+                address: true,
+                postcode: true,
+                lat: true,
+                lng: true,
+              },
+            },
+            assets: {
+              select: {
+                id: true,
+                categoryId: true,
+                categoryName: true,
+                quantity: true,
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                    co2ePerUnit: true,
+                    avgWeight: true,
+                    avgBuybackValue: true,
+                  },
+                },
+              },
+            },
+            job: {
+              select: {
+                id: true,
+                erpJobNumber: true,
+                status: true,
+              },
+            },
           },
-          job: true,
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.booking.count({ where }),
+      ]);
+
+      return {
+        data,
+        pagination: {
+          page: Math.floor(offset / limit) + 1,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
         },
-        orderBy: { createdAt: 'desc' },
-        take: filters.limit,
-        skip: filters.offset,
-      });
+      };
     } else if (filters.userRole === 'client') {
       // Clients should only see bookings they created with their own user account.
       // Do not merge across multiple client records via email, to avoid showing
       // bookings from other client users (e.g., other people under same reseller).
-      return prisma.booking.findMany({
-        where: {
-          tenantId: filters.tenantId,
-          createdBy: filters.userId,
-          ...(filters.status ? { status: filters.status } : {}),
-        },
-        include: {
-          client: true,
-          site: true,
-          assets: {
-            include: { category: true },
+      const limit = filters.limit || 20;
+      const offset = filters.offset || 0;
+
+      const where = {
+        tenantId: filters.tenantId,
+        createdBy: filters.userId,
+        ...(filters.status ? { status: filters.status } : {}),
+      };
+
+      const [data, total] = await Promise.all([
+        prisma.booking.findMany({
+          where,
+          select: {
+            id: true,
+            bookingNumber: true,
+            clientId: true,
+            tenantId: true,
+            siteId: true,
+            siteName: true,
+            siteAddress: true,
+            postcode: true,
+            lat: true,
+            lng: true,
+            scheduledDate: true,
+            status: true,
+            charityPercent: true,
+            estimatedCO2e: true,
+            estimatedBuyback: true,
+            preferredVehicleType: true,
+            roundTripDistanceKm: true,
+            roundTripDistanceMiles: true,
+            erpJobNumber: true,
+            jobId: true,
+            resellerId: true,
+            resellerName: true,
+            createdBy: true,
+            scheduledBy: true,
+            driverId: true,
+            driverName: true,
+            createdAt: true,
+            updatedAt: true,
+            scheduledAt: true,
+            collectedAt: true,
+            sanitisedAt: true,
+            gradedAt: true,
+            completedAt: true,
+            client: {
+              select: {
+                id: true,
+                name: true,
+                organisationName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            site: {
+              select: {
+                id: true,
+                name: true,
+                address: true,
+                postcode: true,
+                lat: true,
+                lng: true,
+              },
+            },
+            assets: {
+              select: {
+                id: true,
+                categoryId: true,
+                categoryName: true,
+                quantity: true,
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                    co2ePerUnit: true,
+                    avgWeight: true,
+                    avgBuybackValue: true,
+                  },
+                },
+              },
+            },
+            job: {
+              select: {
+                id: true,
+                erpJobNumber: true,
+                status: true,
+              },
+            },
           },
-          job: true,
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.booking.count({ where }),
+      ]);
+
+      return {
+        data,
+        pagination: {
+          page: Math.floor(offset / limit) + 1,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
         },
-        orderBy: { createdAt: 'desc' },
-        take: filters.limit,
-        skip: filters.offset,
-      });
+      };
     } else if (filters.userRole === 'reseller') {
-      return bookingRepo.findByReseller(filters.userId, {
+      const limit = filters.limit || 20;
+      const offset = filters.offset || 0;
+      
+      const bookings = await bookingRepo.findByReseller(filters.userId, {
         status: filters.status,
-        limit: filters.limit,
-        offset: filters.offset,
+        limit,
+        offset,
       });
+      
+      // Count total for reseller
+      const resellerBookings = await bookingRepo.findByReseller(filters.userId, {
+        status: filters.status,
+      });
+      const total = resellerBookings.length;
+
+      return {
+        data: bookings,
+        pagination: {
+          page: Math.floor(offset / limit) + 1,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
     }
 
-    return [];
+    return {
+      data: [],
+      pagination: {
+        page: 1,
+        limit: filters.limit || 20,
+        total: 0,
+        totalPages: 0,
+      },
+    };
   }
 
   /**
    * Assign driver to booking (admin only)
+   * Only allows driver assignment when booking status is "created" (after approval/generation)
+   * Once a driver is assigned, the booking moves to "scheduled" status and driver cannot be changed
    */
   async assignDriver(bookingId: string, driverId: string, scheduledBy: string) {
     const booking = await this.getBookingById(bookingId);
 
+    // Only allow driver assignment when booking is in "created" status (Generated/Approved)
+    // This ensures drivers can only be assigned to newly approved bookings, not to bookings that are already scheduled
     if (booking.status !== 'created') {
       throw new ValidationError(
-        `Cannot assign driver to booking in "${booking.status}" status. Only "created" bookings can be assigned.`
+        `Cannot assign driver to booking in "${booking.status}" status. Only bookings in "created" (Generated) status can have drivers assigned.`
       );
     }
 
@@ -399,7 +616,7 @@ export class BookingService {
 
     // Update booking status to 'scheduled' without triggering status change notification
     // (We'll send a specific "Driver assigned" notification instead)
-    const updatedBooking = await bookingRepo.update(booking.id, {
+    await bookingRepo.update(booking.id, {
       status: 'scheduled',
       driverId: driverId,
       driverName: driver.name,
@@ -437,12 +654,22 @@ export class BookingService {
 
     // Create or update job
     const { JobService } = await import('./job.service');
+    const { logger } = await import('../utils/logger');
     const jobService = new JobService();
     if (!booking.jobId) {
       // Create job if it doesn't exist (this will send notification to driver)
+      logger.info('Creating job from booking and assigning driver', {
+        bookingId: booking.id,
+        driverId,
+      });
       await jobService.createJobFromBooking(booking.id, driverId);
     } else {
       // Update existing job to 'routed' and assign driver
+      logger.info('Updating existing job and assigning driver', {
+        bookingId: booking.id,
+        jobId: booking.jobId,
+        driverId,
+      });
       const jobRepo = new JobRepository();
       const job = await jobRepo.findById(booking.jobId);
       if (job) {
@@ -457,6 +684,12 @@ export class BookingService {
             notes: `Driver ${driver.name} assigned - job moved to routed status`,
           });
           // Notify driver of job status change (routed) - this replaces notifyJobAssignment
+          logger.info('Job status changed to routed, sending notification to driver', {
+            jobId: job.id,
+            jobNumber: job.erpJobNumber,
+            driverId,
+            tenantId: booking.tenantId,
+          });
           const { notifyJobStatusChange } = await import('../utils/notifications');
           await notifyJobStatusChange(
             job.id,
@@ -472,6 +705,13 @@ export class BookingService {
             driverId: driverId,
           });
           // Notify driver of job assignment (status didn't change, so use assignment notification)
+          logger.info('Job status unchanged, sending assignment notification to driver', {
+            jobId: job.id,
+            jobNumber: job.erpJobNumber,
+            driverId,
+            tenantId: booking.tenantId,
+            currentStatus: job.status,
+          });
           const { notifyJobAssignment } = await import('../utils/notifications');
           await notifyJobAssignment(
             job.id,
@@ -480,6 +720,11 @@ export class BookingService {
             booking.tenantId
           );
         }
+      } else {
+        logger.warn('Job not found for booking', {
+          bookingId: booking.id,
+          jobId: booking.jobId,
+        });
       }
     }
 
@@ -487,6 +732,39 @@ export class BookingService {
     // we already sent "Driver assigned" notification above, which replaces it
 
     return this.getBookingById(booking.id);
+  }
+
+  /**
+   * Check if a Job ID (erpJobNumber) is unique
+   * Returns true if unique, false if duplicate exists
+   * Optimized: Runs both queries in parallel for faster response
+   */
+  async isJobIdUnique(erpJobNumber: string, excludeBookingId?: string): Promise<boolean> {
+    const trimmedJobNumber = erpJobNumber.trim();
+    
+    if (!trimmedJobNumber) {
+      return false;
+    }
+
+    // Run both queries in parallel for faster response
+    const whereClause: any = { erpJobNumber: trimmedJobNumber };
+    if (excludeBookingId) {
+      whereClause.id = { not: excludeBookingId };
+    }
+
+    const [existingJob, existingBooking] = await Promise.all([
+      prisma.job.findUnique({
+        where: { erpJobNumber: trimmedJobNumber },
+        select: { id: true },
+      }),
+      prisma.booking.findFirst({
+        where: whereClause,
+        select: { id: true },
+      }),
+    ]);
+
+    // Return false if either exists
+    return !existingJob && !existingBooking;
   }
 
   /**
@@ -498,6 +776,14 @@ export class BookingService {
     if (booking.status !== 'pending') {
       throw new ValidationError(
         `Cannot approve booking in "${booking.status}" status. Only "pending" bookings can be approved.`
+      );
+    }
+
+    // Validate that the Job ID is unique
+    const isUnique = await this.isJobIdUnique(erpJobNumber, bookingId);
+    if (!isUnique) {
+      throw new ValidationError(
+        `Job ID "${erpJobNumber.trim()}" already exists. Please enter a unique Job ID.`
       );
     }
 

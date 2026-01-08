@@ -48,6 +48,7 @@ export class JobService {
 
     if (job) {
       // Job already exists - update it to 'routed', assign driver, and update travel emissions
+      let statusChanged = false;
       if (isValidJobTransition(job.status, 'routed')) {
         await jobRepo.update(job.id, {
           status: 'routed',
@@ -60,12 +61,50 @@ export class JobService {
           changedBy: driverId,
           notes: 'Driver assigned - job moved to routed status',
         });
+        statusChanged = true;
       } else {
         // If transition is not valid, just assign the driver and update travel emissions
         await jobRepo.update(job.id, {
           driverId: driverId,
           travelEmissions: travelEmissions, // Update travel emissions when driver is assigned
         });
+      }
+      
+      // Notify driver - use status change notification if status changed, otherwise use assignment notification
+      if (statusChanged) {
+        const { logger } = await import('../utils/logger');
+        logger.info('Job status changed to routed, sending notification to driver', {
+          jobId: job.id,
+          jobNumber: job.erpJobNumber,
+          driverId,
+          tenantId: booking.tenantId,
+        });
+        const { notifyJobStatusChange } = await import('../utils/notifications');
+        await notifyJobStatusChange(
+          job.id,
+          job.erpJobNumber,
+          'routed',
+          driverId,
+          booking.tenantId,
+          'driver'
+        );
+      } else {
+        // Status didn't change, so use assignment notification
+        const { logger } = await import('../utils/logger');
+        logger.info('Job status unchanged, sending assignment notification to driver', {
+          jobId: job.id,
+          jobNumber: job.erpJobNumber,
+          driverId,
+          tenantId: booking.tenantId,
+          currentStatus: job.status,
+        });
+        const { notifyJobAssignment } = await import('../utils/notifications');
+        await notifyJobAssignment(
+          job.id,
+          job.erpJobNumber,
+          driverId,
+          booking.tenantId
+        );
       }
     } else {
       // Create new job with status 'routed'
@@ -108,18 +147,25 @@ export class JobService {
       await bookingRepo.update(booking.id, {
         jobId: job.id,
       });
+      
+      // Notify driver of job status change (routed) for newly created job
+        const { logger } = await import('../utils/logger');
+        logger.info('New job created, sending notification to driver', {
+        jobId: job.id,
+        jobNumber: job.erpJobNumber,
+        driverId,
+        tenantId: booking.tenantId,
+      });
+      const { notifyJobStatusChange } = await import('../utils/notifications');
+      await notifyJobStatusChange(
+        job.id,
+        job.erpJobNumber,
+        'routed',
+        driverId,
+        booking.tenantId,
+        'driver'
+      );
     }
-
-    // Notify driver of job status change (routed) - this replaces notifyJobAssignment to avoid duplicates
-    const { notifyJobStatusChange } = await import('../utils/notifications');
-    await notifyJobStatusChange(
-      job.id,
-      job.erpJobNumber,
-      'routed',
-      driverId,
-      booking.tenantId,
-      'driver'
-    );
 
     return this.getJobById(job.id);
   }
@@ -136,7 +182,7 @@ export class JobService {
   }
 
   /**
-   * Get jobs with filters
+   * Get jobs with filters and pagination
    */
   async getJobs(filters: {
     tenantId: string;
@@ -148,6 +194,9 @@ export class JobService {
     limit?: number;
     offset?: number;
   }) {
+    const limit = filters.limit || 20;
+    const offset = filters.offset || 0;
+
     // Role-based filtering
     if (filters.userRole === 'admin') {
       // Admins should see all jobs across all tenants (no tenantId filter)
@@ -170,33 +219,135 @@ export class JobService {
         ];
       }
 
-      return prisma.job.findMany({
+      const [data, total] = await Promise.all([
+        prisma.job.findMany({
         where,
-        include: {
+          select: {
+            id: true,
+            erpJobNumber: true,
+            bookingId: true,
+            tenantId: true,
+            clientName: true,
+            siteName: true,
+            siteAddress: true,
+            status: true,
+            scheduledDate: true,
+            completedDate: true,
+            co2eSaved: true,
+            travelEmissions: true,
+            buybackValue: true,
+            charityPercent: true,
+            driverId: true,
+            dial2Collection: true,
+            securityRequirements: true,
+            idRequired: true,
+            loadingBayLocation: true,
+            vehicleHeightRestrictions: true,
+            doorLiftSize: true,
+            roadWorksPublicEvents: true,
+            manualHandlingRequirements: true,
+            createdAt: true,
+            updatedAt: true,
           booking: {
-            include: { client: true },
+              select: {
+                id: true,
+                bookingNumber: true,
+                client: {
+                  select: {
+                    id: true,
+                    name: true,
+                    organisationName: true,
+                  },
+                },
+                site: {
+                  select: {
+                    id: true,
+                    name: true,
+                    address: true,
+                    postcode: true,
+                  },
+                },
+                roundTripDistanceKm: true,
+                roundTripDistanceMiles: true,
+              },
           },
           assets: {
-            include: { category: true },
+              select: {
+                id: true,
+                categoryId: true,
+                categoryName: true,
+                quantity: true,
+                serialNumbers: true,
+                grade: true,
+                weight: true,
+                sanitised: true,
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                    co2ePerUnit: true,
+                    avgWeight: true,
+                    avgBuybackValue: true,
+                  },
+                },
+              },
           },
           driver: {
-            include: {
-              driverProfile: true,
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                driverProfile: {
+                  select: {
+                    vehicleReg: true,
+                    vehicleType: true,
+                    vehicleFuelType: true,
+                    phone: true,
+                  },
+                },
             },
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: filters.limit,
-        skip: filters.offset,
-      });
+          take: limit,
+          skip: offset,
+        }),
+        prisma.job.count({ where }),
+      ]);
+
+      return {
+        data,
+        pagination: {
+          page: Math.floor(offset / limit) + 1,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
     } else if (filters.userRole === 'driver') {
       // Drivers can see all their jobs (for history)
       // Access restriction to jobs at "warehouse" or beyond is handled at the UI level (DriverJobView)
-      return jobRepo.findByDriver(filters.userId, {
+      const jobs = await jobRepo.findByDriver(filters.userId, {
         status: filters.status,
-        limit: filters.limit,
-        offset: filters.offset,
+        limit,
+        offset,
       });
+      const total = await prisma.job.count({
+        where: {
+          driverId: filters.userId,
+          ...(filters.status ? { status: filters.status } : {}),
+        },
+      });
+      
+      return {
+        data: jobs,
+        pagination: {
+          page: Math.floor(offset / limit) + 1,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
     } else if (filters.userRole === 'client') {
       // Clients see jobs for their bookings (bookings for their Client record(s) or bookings they created)
       // First, find the Client record(s) associated with this user (by email and tenantId)
@@ -237,63 +388,251 @@ export class JobService {
       const bookingIds = bookings.map(b => b.id);
       
       if (bookingIds.length === 0) {
-        return [];
+        return {
+          data: [],
+          pagination: {
+            page: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+          },
+        };
       }
       
-      return prisma.job.findMany({
-        where: {
+      const where = {
           tenantId: filters.tenantId,
           bookingId: { in: bookingIds },
           ...(filters.status ? { status: filters.status } : {}),
-        },
-        include: {
+      };
+
+      const [data, total] = await Promise.all([
+        prisma.job.findMany({
+          where,
+          select: {
+            id: true,
+            erpJobNumber: true,
+            bookingId: true,
+            tenantId: true,
+            clientName: true,
+            siteName: true,
+            siteAddress: true,
+            status: true,
+            scheduledDate: true,
+            completedDate: true,
+            co2eSaved: true,
+            travelEmissions: true,
+            buybackValue: true,
+            charityPercent: true,
+            driverId: true,
+            dial2Collection: true,
+            securityRequirements: true,
+            idRequired: true,
+            loadingBayLocation: true,
+            vehicleHeightRestrictions: true,
+            doorLiftSize: true,
+            roadWorksPublicEvents: true,
+            manualHandlingRequirements: true,
+            createdAt: true,
+            updatedAt: true,
           booking: {
-            include: { client: true },
+              select: {
+                id: true,
+                bookingNumber: true,
+                client: {
+                  select: {
+                    id: true,
+                    name: true,
+                    organisationName: true,
+                  },
+                },
+                roundTripDistanceKm: true,
+                roundTripDistanceMiles: true,
+              },
           },
           assets: {
-            include: { category: true },
+              select: {
+                id: true,
+                categoryId: true,
+                categoryName: true,
+                quantity: true,
+                serialNumbers: true,
+                grade: true,
+                weight: true,
+                sanitised: true,
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                    co2ePerUnit: true,
+                    avgWeight: true,
+                    avgBuybackValue: true,
+                  },
+                },
+              },
           },
           driver: {
-            include: {
-              driverProfile: true,
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                driverProfile: {
+                  select: {
+                    vehicleReg: true,
+                    vehicleType: true,
+                    vehicleFuelType: true,
+                    phone: true,
+                  },
+                },
             },
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: filters.limit,
-        skip: filters.offset,
-      });
+          take: limit,
+          skip: offset,
+        }),
+        prisma.job.count({ where }),
+      ]);
+
+      return {
+        data,
+        pagination: {
+          page: Math.floor(offset / limit) + 1,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
     } else if (filters.userRole === 'reseller') {
       // Resellers see jobs for their clients' bookings
       const bookings = await bookingRepo.findByReseller(filters.userId);
       const bookingIds = bookings.map(b => b.id);
       
-      return prisma.job.findMany({
-        where: {
+      if (bookingIds.length === 0) {
+        return {
+          data: [],
+          pagination: {
+            page: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+          },
+        };
+      }
+
+      const where = {
           tenantId: filters.tenantId,
           bookingId: { in: bookingIds },
-          status: filters.status,
-        },
-        include: {
+        ...(filters.status ? { status: filters.status } : {}),
+      };
+
+      const [data, total] = await Promise.all([
+        prisma.job.findMany({
+          where,
+          select: {
+            id: true,
+            erpJobNumber: true,
+            bookingId: true,
+            tenantId: true,
+            clientName: true,
+            siteName: true,
+            siteAddress: true,
+            status: true,
+            scheduledDate: true,
+            completedDate: true,
+            co2eSaved: true,
+            travelEmissions: true,
+            buybackValue: true,
+            charityPercent: true,
+            driverId: true,
+            dial2Collection: true,
+            securityRequirements: true,
+            idRequired: true,
+            loadingBayLocation: true,
+            vehicleHeightRestrictions: true,
+            doorLiftSize: true,
+            roadWorksPublicEvents: true,
+            manualHandlingRequirements: true,
+            createdAt: true,
+            updatedAt: true,
           booking: {
-            include: { client: true },
+              select: {
+                id: true,
+                bookingNumber: true,
+                client: {
+                  select: {
+                    id: true,
+                    name: true,
+                    organisationName: true,
+                  },
+                },
+                roundTripDistanceKm: true,
+                roundTripDistanceMiles: true,
+              },
           },
           assets: {
-            include: { category: true },
+              select: {
+                id: true,
+                categoryId: true,
+                categoryName: true,
+                quantity: true,
+                serialNumbers: true,
+                grade: true,
+                weight: true,
+                sanitised: true,
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                    co2ePerUnit: true,
+                    avgWeight: true,
+                    avgBuybackValue: true,
+                  },
+                },
+              },
           },
           driver: {
-            include: {
-              driverProfile: true,
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                driverProfile: {
+                  select: {
+                    vehicleReg: true,
+                    vehicleType: true,
+                    vehicleFuelType: true,
+                    phone: true,
+                  },
+                },
             },
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: filters.limit,
-        skip: filters.offset,
-      });
+          take: limit,
+          skip: offset,
+        }),
+        prisma.job.count({ where }),
+      ]);
+
+      return {
+        data,
+        pagination: {
+          page: Math.floor(offset / limit) + 1,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
     }
 
-    return [];
+    return {
+      data: [],
+      pagination: {
+        page: 1,
+        limit,
+        total: 0,
+        totalPages: 0,
+      },
+    };
   }
 
   /**
@@ -386,6 +725,28 @@ export class JobService {
             booking.tenantId
           );
         } else if (['collected', 'warehouse', 'sanitised', 'graded', 'completed'].includes(newStatus)) {
+          // Generate Chain of Custody document when status becomes 'warehouse' (after assets delivered to warehouse)
+          // Only generate once when status changes to 'warehouse'
+          if (newStatus === 'warehouse') {
+            try {
+              const { DocumentService } = await import('./document.service');
+              const documentService = new DocumentService();
+              const documentId = await documentService.generateChainOfCustody(job.id, changedBy);
+              const { logger } = await import('../utils/logger');
+              logger.info('Chain of Custody document generated', { jobId: job.id, documentId });
+            } catch (error: any) {
+              // If document already exists, that's fine - just log it
+              if (error?.message?.includes('already exists') || error?.message?.includes('skipping')) {
+                const { logger } = await import('../utils/logger');
+                logger.debug('Chain of Custody document already exists, skipping generation', { jobId: job.id });
+              } else {
+                // Log other errors but don't fail the status update
+                const { logError } = await import('../utils/logger');
+                logError('Failed to generate Chain of Custody document', error, { jobId: job.id });
+              }
+            }
+          }
+
           // Handle different statuses with appropriate notifications
           if (newStatus === 'collected') {
             // Map job status 'collected' to booking status 'collected'
@@ -455,17 +816,25 @@ export class JobService {
     // Note: 'graded' status notification is handled by notifyGradedForApproval in booking.service.ts
     // to avoid duplicate notifications and provide more specific messaging
     if (['warehouse', 'sanitised', 'completed'].includes(newStatus)) {
+      // Admins are global across tenants (can see all jobs), so don't filter by tenantId
       const adminUsers = await prisma.user.findMany({
         where: {
-          tenantId: job.tenantId,
           role: 'admin',
           status: 'active',
         },
         select: { id: true },
       });
-      
+
+      const { logger } = await import('../utils/logger');
       if (adminUsers.length > 0) {
         const { notifyJobStatusChange } = await import('../utils/notifications');
+        logger.info('Notifying admins of job status change', {
+          jobId: job.id,
+          jobNumber: job.erpJobNumber,
+          newStatus,
+          adminCount: adminUsers.length,
+          adminIds: adminUsers.map(a => a.id),
+        });
         // Notify each admin
         for (const admin of adminUsers) {
           await notifyJobStatusChange(
@@ -477,6 +846,12 @@ export class JobService {
             'admin'
           );
         }
+      } else {
+        logger.warn('No admin users found to notify for job status change', {
+          jobId: job.id,
+          jobNumber: job.erpJobNumber,
+          newStatus,
+        });
       }
     }
 
@@ -560,18 +935,14 @@ export class JobService {
       throw new ValidationError(`Evidence has already been submitted for status "${data.status}" and cannot be modified. Evidence is immutable for audit purposes.`);
     }
 
-    // Debug: Log evidence data before saving
-    console.log('[Evidence Service] Saving evidence:', {
+    // Log evidence data before saving (debug level)
+    const { logger } = await import('../utils/logger');
+    logger.debug('Saving evidence', {
       jobId: job.id,
       status: data.status,
       photosCount: Array.isArray(data.photos) ? data.photos.length : 0,
-      photos: data.photos,
       hasSignature: !!data.signature,
-      signature: data.signature ? 'present' : 'missing',
       sealNumbersCount: Array.isArray(data.sealNumbers) ? data.sealNumbers.length : 0,
-      sealNumbers: data.sealNumbers,
-      hasNotes: !!data.notes,
-      notes: data.notes,
       uploadedBy: data.uploadedBy,
     });
 
@@ -599,15 +970,75 @@ export class JobService {
       },
     });
 
-    // Debug: Log created evidence
-    console.log('[Evidence Service] Evidence created:', {
+    // Log created evidence
+    logger.info('Evidence created', {
       id: createdEvidence.id,
       jobId: createdEvidence.jobId,
       status: createdEvidence.status,
       photosCount: createdEvidence.photos.length,
       hasSignature: !!createdEvidence.signature,
       sealNumbersCount: createdEvidence.sealNumbers.length,
-      hasNotes: !!createdEvidence.notes,
+    });
+
+    return this.getJobById(job.id);
+  }
+
+  /**
+   * Update driver journey fields (for routed status)
+   * These fields are entered by the driver before starting the journey
+   * All fields are required
+   */
+  async updateJourneyFields(jobId: string, data: {
+    dial2Collection?: string;
+    securityRequirements?: string;
+    idRequired?: string;
+    loadingBayLocation?: string;
+    vehicleHeightRestrictions?: string;
+    doorLiftSize?: string;
+    roadWorksPublicEvents?: string;
+    manualHandlingRequirements?: string;
+  }) {
+    const job = await this.getJobById(jobId);
+
+    // Only allow updating journey fields when job is in 'routed' status
+    if (job.status !== 'routed') {
+      throw new ValidationError(
+        `Journey fields can only be updated when job is in 'routed' status. Current status: "${job.status}"`
+      );
+    }
+
+    // Validate that all required fields are provided and not empty
+    const requiredFields = [
+      { name: 'dial2Collection', value: data.dial2Collection, label: 'DIAL 2 Collection' },
+      { name: 'securityRequirements', value: data.securityRequirements, label: 'Security Requirements' },
+      { name: 'idRequired', value: data.idRequired, label: 'ID Required' },
+      { name: 'loadingBayLocation', value: data.loadingBayLocation, label: 'Loading Bay Location' },
+      { name: 'vehicleHeightRestrictions', value: data.vehicleHeightRestrictions, label: 'Vehicle Height Restrictions' },
+      { name: 'doorLiftSize', value: data.doorLiftSize, label: 'Door & Lift Size' },
+      { name: 'roadWorksPublicEvents', value: data.roadWorksPublicEvents, label: 'Road Works / Public Events' },
+      { name: 'manualHandlingRequirements', value: data.manualHandlingRequirements, label: 'Manual Handling Requirements' },
+    ];
+
+    const missingFields = requiredFields
+      .filter(field => !field.value || (typeof field.value === 'string' && field.value.trim() === ''))
+      .map(field => field.label);
+
+    if (missingFields.length > 0) {
+      throw new ValidationError(
+        `All journey fields are required. Missing: ${missingFields.join(', ')}`
+      );
+    }
+
+    // Update job with journey fields (trim whitespace from all fields)
+    await jobRepo.update(job.id, {
+      dial2Collection: data.dial2Collection?.trim(),
+      securityRequirements: data.securityRequirements?.trim(),
+      idRequired: data.idRequired?.trim(),
+      loadingBayLocation: data.loadingBayLocation?.trim(),
+      vehicleHeightRestrictions: data.vehicleHeightRestrictions?.trim(),
+      doorLiftSize: data.doorLiftSize?.trim(),
+      roadWorksPublicEvents: data.roadWorksPublicEvents?.trim(),
+      manualHandlingRequirements: data.manualHandlingRequirements?.trim(),
     });
 
     return this.getJobById(job.id);

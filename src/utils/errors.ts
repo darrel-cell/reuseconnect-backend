@@ -50,6 +50,7 @@ export class ForbiddenError extends AppError {
 // Error handler middleware
 import { Request, Response, NextFunction } from 'express';
 import { ApiResponse } from '../types';
+import { logger, logError } from './logger';
 
 export function errorHandler(
   err: Error | AppError,
@@ -57,7 +58,21 @@ export function errorHandler(
   res: Response,
   next: NextFunction
 ) {
+  const requestId = req.id || 'unknown';
+
   if (err instanceof AppError) {
+    // Log operational errors at appropriate level
+    if (err.statusCode >= 500) {
+      logError('Application error', err, { requestId, statusCode: err.statusCode });
+    } else {
+      logger.warn('Client error', {
+        requestId,
+        statusCode: err.statusCode,
+        message: err.message,
+        ...(err instanceof ValidationError && { fields: err.fields }),
+      });
+    }
+
     const response: ApiResponse = {
       success: false,
       error: err.message,
@@ -65,8 +80,15 @@ export function errorHandler(
     return res.status(err.statusCode).json(response);
   }
 
-  // Unknown error
-  console.error('Unhandled error:', err);
+  // Unknown/unhandled error
+  logError('Unhandled error', err, { 
+    requestId,
+    method: req.method,
+    path: req.path,
+    body: req.body,
+    query: req.query,
+  });
+
   const response: ApiResponse = {
     success: false,
     error: process.env.NODE_ENV === 'production' 

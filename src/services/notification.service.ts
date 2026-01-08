@@ -83,12 +83,12 @@ export class NotificationService {
       where.read = options.read;
     }
 
-    // Debug logging
-    console.log('[Notification Service] getNotifications:', {
+    // Log notification fetch (debug level)
+    const { logger } = await import('../utils/logger');
+    logger.debug('Fetching notifications', {
       userId,
       tenantId,
-      where,
-      options,
+      read: options?.read,
     });
 
     const [notifications, total] = await Promise.all([
@@ -101,11 +101,6 @@ export class NotificationService {
       prisma.notification.count({ where }),
     ]);
 
-    console.log('[Notification Service] Found notifications:', {
-      count: notifications.length,
-      total,
-      notificationIds: notifications.map(n => n.id),
-    });
 
     return {
       notifications,
@@ -152,12 +147,20 @@ export class NotificationService {
   /**
    * Mark all notifications as read for a user
    */
-  async markAllAsRead(userId: string) {
+  async markAllAsRead(userId: string, tenantId?: string) {
+    const where: any = {
+      userId,
+      read: false,
+    };
+    
+    // For non-admin/non-driver roles, filter by tenantId
+    // (admins and drivers can see notifications across all tenants)
+    if (tenantId !== undefined) {
+      where.tenantId = tenantId;
+    }
+    
     return prisma.notification.updateMany({
-      where: {
-        userId,
-        read: false,
-      },
+      where,
       data: {
         read: true,
         readAt: new Date(),

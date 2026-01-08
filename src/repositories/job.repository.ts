@@ -7,7 +7,10 @@ export class JobRepository {
       where: { id },
       include: {
         booking: {
-          include: { client: true },
+          include: { 
+            client: true,
+            site: true,
+          },
         },
         assets: {
           include: { category: true },
@@ -38,7 +41,10 @@ export class JobRepository {
       where: { erpJobNumber },
       include: {
         booking: {
-          include: { client: true },
+          include: { 
+            client: true,
+            site: true,
+          },
         },
         assets: {
           include: { category: true },
@@ -69,7 +75,10 @@ export class JobRepository {
       where: { bookingId },
       include: {
         booking: {
-          include: { client: true },
+          include: { 
+            client: true,
+            site: true,
+          },
         },
         assets: {
           include: { category: true },
@@ -114,7 +123,10 @@ export class JobRepository {
       data,
       include: {
         booking: {
-          include: { client: true },
+          include: { 
+            client: true,
+            site: true,
+          },
         },
         assets: {
           include: { category: true },
@@ -135,13 +147,24 @@ export class JobRepository {
     travelEmissions?: number;
     buybackValue?: number;
     driverId?: string;
+    dial2Collection?: string;
+    securityRequirements?: string;
+    idRequired?: string;
+    loadingBayLocation?: string;
+    vehicleHeightRestrictions?: string;
+    doorLiftSize?: string;
+    roadWorksPublicEvents?: string;
+    manualHandlingRequirements?: string;
   }) {
     return prisma.job.update({
       where: { id },
       data,
       include: {
         booking: {
-          include: { client: true },
+          include: { 
+            client: true,
+            site: true,
+          },
         },
         assets: {
           include: { category: true },
@@ -184,7 +207,10 @@ export class JobRepository {
       where,
       include: {
         booking: {
-          include: { client: true },
+          include: { 
+            client: true,
+            site: true,
+          },
         },
         assets: {
           include: { category: true },
@@ -236,7 +262,10 @@ export class JobRepository {
       where,
       include: {
         booking: {
-          include: { client: true },
+          include: { 
+            client: true,
+            site: true,
+          },
         },
         assets: {
           include: { category: true },
