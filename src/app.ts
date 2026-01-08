@@ -25,6 +25,10 @@ import testEmailRoutes from './routes/test-email.routes';
 
 const app: Express = express();
 
+// Trust proxy - required when behind reverse proxy (Nginx)
+// This allows Express to correctly identify client IPs from X-Forwarded-For header
+app.set('trust proxy', true);
+
 // Extend Request interface to include request ID
 declare global {
   namespace Express {
