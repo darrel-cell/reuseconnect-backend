@@ -44,7 +44,7 @@ export class JobService {
     const travelEmissions = calculateTravelEmissions(roundTripDistanceKm, vehicleFuelType);
 
     // Check if job already exists (created when booking was approved)
-    let job = await jobRepo.findByBookingId(booking.id);
+    let job: any = await jobRepo.findByBookingId(booking.id);
 
     if (job) {
       // Job already exists - update it to 'routed', assign driver, and update travel emissions

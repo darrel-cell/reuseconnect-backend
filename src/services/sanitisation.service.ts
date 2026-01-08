@@ -2,10 +2,8 @@
 import { NotFoundError, ValidationError } from '../utils/errors';
 import prisma from '../config/database';
 import { BookingRepository } from '../repositories/booking.repository';
-import { JobRepository } from '../repositories/job.repository';
 
 const bookingRepo = new BookingRepository();
-const jobRepo = new JobRepository();
 
 export interface SanitisationRecordData {
   id: string;

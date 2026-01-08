@@ -1,8 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { SanitisationService } from '../services/sanitisation.service';
 import { AuthenticatedRequest, ApiResponse } from '../types';
 import { BookingRepository } from '../repositories/booking.repository';
-import { ForbiddenError } from '../utils/errors';
 import prisma from '../config/database';
 
 const sanitisationService = new SanitisationService();
@@ -82,12 +81,12 @@ export class SanitisationController {
 
       const records = await sanitisationService.getSanitisationRecords(bookingId);
       
-      res.json({
+      return res.json({
         success: true,
         data: records,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -121,12 +120,12 @@ export class SanitisationController {
         notes
       );
 
-      res.json({
+      return res.json({
         success: true,
         data: record,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -146,12 +145,12 @@ export class SanitisationController {
 
       const record = await sanitisationService.verifySanitisation(id);
 
-      res.json({
+      return res.json({
         success: true,
         data: record,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

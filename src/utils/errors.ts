@@ -56,7 +56,7 @@ export function errorHandler(
   err: Error | AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ) {
   const requestId = req.id || 'unknown';
 

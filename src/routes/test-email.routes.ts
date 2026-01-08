@@ -8,7 +8,7 @@ import { config } from '../config/env';
 const router = Router();
 
 // Test email configuration
-router.get('/config', (req, res) => {
+router.get('/config', (_req, res) => {
   res.json({
     configured: emailService.isConfigured(),
     config: {
@@ -45,7 +45,7 @@ router.post('/test', async (req, res) => {
 
     await emailService.sendTestEmail(email);
     
-    res.json({
+    return res.json({
       success: true,
       message: `Test email sent to ${email}`,
     });
@@ -54,7 +54,7 @@ router.post('/test', async (req, res) => {
     logger.error('Test email route error', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
       details: error instanceof Error ? error.stack : undefined,

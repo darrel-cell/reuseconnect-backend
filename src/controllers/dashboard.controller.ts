@@ -1,11 +1,9 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest, ApiResponse } from '../types';
 import prisma from '../config/database';
 import { BookingRepository } from '../repositories/booking.repository';
-import { JobRepository } from '../repositories/job.repository';
 
 const bookingRepo = new BookingRepository();
-const jobRepo = new JobRepository();
 
 export class DashboardController {
   async getStats(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -154,12 +152,12 @@ export class DashboardController {
         estimatedCO2eSaved: bookedJobs.reduce((sum, j) => sum + (j.co2eSaved || 0), 0),
       };
 
-      res.json({
+      return res.json({
         success: true,
         data: stats,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

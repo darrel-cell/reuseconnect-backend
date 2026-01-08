@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { JobService } from '../services/job.service';
 import { AuthenticatedRequest, ApiResponse } from '../types';
 import { transformJobForAPI, transformJobsForAPI } from '../utils/job-transform';
@@ -14,12 +14,12 @@ export class JobController {
       const job = await jobService.getJobById(id);
       const transformedJob = transformJobForAPI(job as any);
       
-      res.json({
+      return res.json({
         success: true,
         data: transformedJob,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -48,7 +48,8 @@ export class JobController {
         offset,
       });
 
-      if (!result || !result.data) {
+      // Type guard: check if result has the expected structure
+      if (!result || Array.isArray(result) || !('data' in result) || !('pagination' in result)) {
         return res.json({
           success: true,
           data: [],
@@ -101,12 +102,12 @@ export class JobController {
       );
 
       const transformedJob = transformJobForAPI(job as any);
-      res.json({
+      return res.json({
         success: true,
         data: transformedJob,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -180,12 +181,12 @@ export class JobController {
       });
 
       const transformedJob = transformJobForAPI(job as any);
-      res.json({
+      return res.json({
         success: true,
         data: transformedJob,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -222,12 +223,12 @@ export class JobController {
       });
 
       const transformedJob = transformJobForAPI(job as any);
-      res.json({
+      return res.json({
         success: true,
         data: transformedJob,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

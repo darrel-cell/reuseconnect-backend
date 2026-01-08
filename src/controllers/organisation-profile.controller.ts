@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest, ApiResponse } from '../types';
 import { OrganisationProfileService, OrganisationProfileData } from '../services/organisation-profile.service';
 
@@ -28,12 +28,12 @@ export class OrganisationProfileController {
         } as ApiResponse);
       }
 
-      res.json({
+      return res.json({
         success: true,
         data: profile,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -63,12 +63,12 @@ export class OrganisationProfileController {
 
       const profile = await profileService.upsertProfile(userId, data);
 
-      res.json({
+      return res.json({
         success: true,
         data: profile,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -88,12 +88,12 @@ export class OrganisationProfileController {
 
       const isComplete = await profileService.isProfileComplete(userId);
 
-      res.json({
+      return res.json({
         success: true,
         data: { isComplete },
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { GradingService } from '../services/grading.service';
 import { AuthenticatedRequest, ApiResponse } from '../types';
 import { BookingRepository } from '../repositories/booking.repository';
@@ -81,12 +81,12 @@ export class GradingController {
 
       const records = await gradingService.getGradingRecords(bookingId);
       
-      res.json({
+      return res.json({
         success: true,
         data: records,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -121,12 +121,12 @@ export class GradingController {
         notes
       );
 
-      res.json({
+      return res.json({
         success: true,
         data: record,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -150,12 +150,12 @@ export class GradingController {
         parseInt(quantity as string)
       );
 
-      res.json({
+      return res.json({
         success: true,
         data: resaleValue,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

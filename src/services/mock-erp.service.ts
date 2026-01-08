@@ -1,8 +1,6 @@
 // Mock ERP Integration Service
 // This simulates ERP API calls until real ERP is ready
 
-import { config } from '../config/env';
-
 export interface ERPJobRequest {
   clientName: string;
   siteName: string;
@@ -44,7 +42,7 @@ class MockERPService {
   /**
    * Create a job in ERP and get job number
    */
-  async createJob(request: ERPJobRequest): Promise<ERPJobResponse> {
+  async createJob(_request: ERPJobRequest): Promise<ERPJobResponse> {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -63,7 +61,7 @@ class MockERPService {
   /**
    * Sync inventory to ERP
    */
-  async syncInventory(jobNumber: string, assets: Array<{
+  async syncInventory(_jobNumber: string, _assets: Array<{
     categoryName: string;
     quantity: number;
     serialNumbers?: string[];
@@ -77,7 +75,7 @@ class MockERPService {
   /**
    * Get grading results from ERP
    */
-  async getGradingResults(jobNumber: string): Promise<ERPGradingResult> {
+  async getGradingResults(_jobNumber: string): Promise<ERPGradingResult> {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 400));
 
@@ -105,7 +103,7 @@ class MockERPService {
   /**
    * Get sanitisation results from ERP
    */
-  async getSanitisationResults(jobNumber: string): Promise<ERPSanitisationResult> {
+  async getSanitisationResults(_jobNumber: string): Promise<ERPSanitisationResult> {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 400));
 
@@ -132,7 +130,7 @@ class MockERPService {
   /**
    * Get final buyback value from ERP
    */
-  async getFinalBuybackValue(jobNumber: string): Promise<number> {
+  async getFinalBuybackValue(_jobNumber: string): Promise<number> {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 300));
 
@@ -143,7 +141,7 @@ class MockERPService {
   /**
    * Get invoice reference from ERP
    */
-  async getInvoiceReference(jobNumber: string): Promise<{
+  async getInvoiceReference(_jobNumber: string): Promise<{
     invoiceNumber: string;
     invoiceUrl: string;
   }> {

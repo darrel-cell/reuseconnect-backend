@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { verifyToken, extractTokenFromHeader } from '../utils/jwt';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors';
 import { AuthenticatedRequest, UserRole } from '../types';
@@ -8,7 +8,7 @@ import { AuthenticatedRequest, UserRole } from '../types';
  */
 export function authenticate(
   req: AuthenticatedRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) {
   try {
@@ -30,7 +30,7 @@ export function authenticate(
  * Middleware to check if user has required role(s)
  */
 export function authorize(...allowedRoles: UserRole[]) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
     if (!req.user) {
       return next(new UnauthorizedError('Authentication required'));
     }
@@ -48,7 +48,7 @@ export function authorize(...allowedRoles: UserRole[]) {
  */
 export function requireAdmin(
   req: AuthenticatedRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) {
   if (!req.user) {
@@ -66,7 +66,7 @@ export function requireAdmin(
  * Middleware to check if user owns resource or is admin
  */
 export function requireOwnershipOrAdmin(tenantIdField = 'tenantId') {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
     if (!req.user) {
       return next(new UnauthorizedError('Authentication required'));
     }
@@ -95,7 +95,7 @@ export function requireOwnershipOrAdmin(tenantIdField = 'tenantId') {
  */
 export function allowAdminOrBookingOwner(
   req: AuthenticatedRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) {
   if (!req.user) {

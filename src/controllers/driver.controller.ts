@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { DriverService } from '../services/driver.service';
 import { AuthenticatedRequest, ApiResponse } from '../types';
 
@@ -29,12 +29,12 @@ export class DriverController {
         hasProfile: !!driver.driverProfile,
       }));
 
-      res.json({
+      return res.json({
         success: true,
         data: transformedDrivers,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -65,7 +65,7 @@ export class DriverController {
         !!driver.driverProfile.vehicleReg &&
         driver.driverProfile.vehicleReg.trim().toUpperCase() !== 'TBD';
 
-      res.json({
+      return res.json({
         success: true,
         data: {
           id: driver.id,
@@ -80,7 +80,7 @@ export class DriverController {
         },
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -122,12 +122,12 @@ export class DriverController {
         });
       }
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: profile,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -156,12 +156,12 @@ export class DriverController {
         phone,
       });
 
-      res.json({
+      return res.json({
         success: true,
         data: profile,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -177,12 +177,12 @@ export class DriverController {
       const { id } = req.params;
       await driverService.deleteProfile(id);
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Driver deleted successfully',
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

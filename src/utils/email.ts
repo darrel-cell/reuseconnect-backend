@@ -125,7 +125,7 @@ class EmailService {
         sendOptions.privateKey = config.email.privateKey.trim();
       }
       
-      const response = await emailjs.send(
+      await emailjs.send(
         this.emailConfig.serviceId,
         this.emailConfig.templateId,
         templateParams,

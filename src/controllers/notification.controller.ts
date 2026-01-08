@@ -1,5 +1,5 @@
 // Notification Controller
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest, ApiResponse } from '../types';
 import { NotificationService } from '../services/notification.service';
 
@@ -62,7 +62,7 @@ export class NotificationController {
         createdAt: notification.createdAt.toISOString(),
       }));
 
-      res.json({
+      return res.json({
         success: true,
         data: {
           notifications: formattedNotifications,
@@ -70,7 +70,7 @@ export class NotificationController {
         },
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -98,12 +98,12 @@ export class NotificationController {
         tenantFilter
       );
 
-      res.json({
+      return res.json({
         success: true,
         data: { count },
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -130,7 +130,7 @@ export class NotificationController {
 
       await notificationService.markAsRead(id, req.user.userId);
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Notification marked as read',
       } as ApiResponse);
@@ -141,7 +141,7 @@ export class NotificationController {
           error: error.message,
         } as ApiResponse);
       }
-      next(error);
+      return next(error);
     }
   }
 
@@ -167,13 +167,13 @@ export class NotificationController {
 
       const result = await notificationService.markAllAsRead(req.user.userId, tenantFilter);
 
-      res.json({
+      return res.json({
         success: true,
         message: `Marked ${result.count} notifications as read`,
         data: { count: result.count },
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -200,7 +200,7 @@ export class NotificationController {
 
       await notificationService.deleteNotification(id, req.user.userId);
 
-      res.json({
+      return res.json({
         success: true,
         message: 'Notification deleted',
       } as ApiResponse);
@@ -211,7 +211,7 @@ export class NotificationController {
           error: error.message,
         } as ApiResponse);
       }
-      next(error);
+      return next(error);
     }
   }
 
@@ -230,13 +230,13 @@ export class NotificationController {
 
       const result = await notificationService.deleteAllRead(req.user.userId);
 
-      res.json({
+      return res.json({
         success: true,
         message: `Deleted ${result.count} read notifications`,
         data: { count: result.count },
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

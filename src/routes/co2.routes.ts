@@ -1,7 +1,7 @@
 // CO2 Routes
 import { Router } from 'express';
 import { CO2Controller } from '../controllers/co2.controller';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 import { body } from 'express-validator';
 import { validate } from '../middleware/validator';
 

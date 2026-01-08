@@ -1,5 +1,5 @@
 // CO2 Controller
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { CO2Service } from '../services/co2.service';
 import { AuthenticatedRequest } from '../types';
 import { ApiResponse } from '../types';

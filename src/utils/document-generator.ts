@@ -81,7 +81,6 @@ export async function generateChainOfCustodyPDF(
 
       // Color scheme
       const primaryColor = '#1a5f3f'; // Dark green
-      const secondaryColor = '#2d8659'; // Medium green
       const textColor = '#1f2937'; // Dark gray
       const lightGray = '#f3f4f6';
       const borderColor = '#e5e7eb';
@@ -634,7 +633,7 @@ export async function generateChainOfCustodyPDF(
         },
       ];
 
-      formattedTerms.forEach((termObj, index) => {
+      formattedTerms.forEach((termObj) => {
         // Calculate actual content height
         doc.fontSize(10).font('Helvetica-Bold');
         const mainHeight = doc.heightOfString(termObj.main, { width: 505 });

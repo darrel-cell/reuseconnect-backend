@@ -193,7 +193,7 @@ export class InviteService {
       invitedBy: invite.invitedBy,
       invitedAt: invite.invitedAt.toISOString(),
       expiresAt: invite.expiresAt.toISOString(),
-      acceptedAt: invite.acceptedAt ? invite.acceptedAt.toISOString() : undefined,
+      acceptedAt: undefined, // Already checked above that it's null
       token: invite.token,
     };
   }
@@ -256,12 +256,6 @@ export class InviteService {
         throw new BadRequestError('A user with this email already exists');
       }
     } else {
-      // Get inviter information to determine if they're a reseller
-      const inviter = await prisma.user.findUnique({
-        where: { id: invite.invitedBy },
-        select: { id: true, role: true, name: true },
-      });
-
       // Create user account (invited users are automatically approved/active)
       user = await prisma.user.create({
         data: {
@@ -415,7 +409,6 @@ export class InviteService {
     return invites.map(invite => {
       const isExpired = new Date(invite.expiresAt) < new Date() && !invite.acceptedAt;
       const isAccepted = !!invite.acceptedAt;
-      const isPending = !isAccepted && !isExpired;
 
       return {
         id: invite.id,
