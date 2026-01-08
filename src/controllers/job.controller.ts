@@ -48,15 +48,23 @@ export class JobController {
         offset,
       });
 
+      if (!result || !result.data) {
+        return res.json({
+          success: true,
+          data: [],
+          pagination: { page: 1, limit, total: 0, totalPages: 0 },
+        } as ApiResponse);
+      }
+
       const transformedJobs = transformJobsForAPI(result.data as any[]);
       
-      res.json({
+      return res.json({
         success: true,
         data: transformedJobs,
         pagination: result.pagination,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 

@@ -148,7 +148,7 @@ export class InviteService {
       invitedBy: invite.invitedBy,
       invitedAt: invite.invitedAt.toISOString(),
       expiresAt: invite.expiresAt.toISOString(),
-      acceptedAt: invite.acceptedAt?.toISOString(),
+      acceptedAt: invite.acceptedAt ? invite.acceptedAt.toISOString() : undefined,
       token: invite.token,
     };
   }
@@ -193,7 +193,7 @@ export class InviteService {
       invitedBy: invite.invitedBy,
       invitedAt: invite.invitedAt.toISOString(),
       expiresAt: invite.expiresAt.toISOString(),
-      acceptedAt: invite.acceptedAt?.toISOString(),
+      acceptedAt: invite.acceptedAt ? invite.acceptedAt.toISOString() : undefined,
       token: invite.token,
     };
   }
@@ -426,7 +426,7 @@ export class InviteService {
         invitedBy: invite.invitedBy,
         invitedAt: invite.invitedAt.toISOString(),
         expiresAt: invite.expiresAt.toISOString(),
-        acceptedAt: invite.acceptedAt?.toISOString(),
+        acceptedAt: invite.acceptedAt ? invite.acceptedAt.toISOString() : undefined,
         token: invite.token,
         status: isAccepted ? 'accepted' : isExpired ? 'expired' : 'pending',
         inviter: invite.inviter,

@@ -80,7 +80,7 @@ export class DriverService {
       } else {
         // For new drivers, check if there's a pending invitation
         // If not, we'll create one automatically (for admin convenience)
-        let pendingInvite = await prisma.invite.findFirst({
+        let pendingInvite: any = await prisma.invite.findFirst({
           where: {
             email: data.email,
             role: 'driver',

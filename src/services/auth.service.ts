@@ -86,7 +86,9 @@ export class AuthService {
 
     // Drivers cannot sign up directly - they must be invited
     // This check prevents any attempt to sign up as a driver
-    if (data.role === 'driver') {
+    // Note: data.role is typed as 'client' | 'reseller' | undefined, so 'driver' is not possible,
+    // but we keep this check for runtime safety in case the type is bypassed
+    if (data.role && data.role === 'driver') {
       throw new ValidationError('Drivers must be invited by an administrator. Please use the invitation link to join.');
     }
 

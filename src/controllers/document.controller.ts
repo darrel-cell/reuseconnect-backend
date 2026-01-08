@@ -1,8 +1,7 @@
 // Document Controller
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { DocumentService } from '../services/document.service';
-import { AuthenticatedRequest } from '../middleware/auth';
-import { ApiResponse } from '../types';
+import { AuthenticatedRequest, ApiResponse } from '../types';
 import path from 'path';
 import fs from 'fs';
 
@@ -24,12 +23,12 @@ export class DocumentController {
       const { jobId } = req.params;
       const documents = await documentService.getJobDocuments(jobId);
 
-      res.json({
+      return res.json({
         success: true,
         data: documents,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -48,12 +47,12 @@ export class DocumentController {
       const { bookingId } = req.params;
       const documents = await documentService.getBookingDocuments(bookingId);
 
-      res.json({
+      return res.json({
         success: true,
         data: documents,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -85,15 +84,16 @@ export class DocumentController {
       
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
+      return;
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
   /**
    * Get all documents for the current user (based on role)
    */
-  async getMyDocuments(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  async getMyDocuments(req: AuthenticatedRequest, res: Response, _next: NextFunction) {
     try {
       if (!req.user) {
         return res.status(401).json({
@@ -104,7 +104,7 @@ export class DocumentController {
 
       const prisma = (await import('../config/database')).default;
 
-      let documents;
+      let documents: any[] = [];
 
       if (req.user.role === 'admin') {
         // Admin sees all documents across all tenants (similar to bookings and jobs)
@@ -247,19 +247,19 @@ export class DocumentController {
         documents = [];
       }
 
-      res.json({
+      return res.json({
         success: true,
         data: documents || [],
       } as ApiResponse);
     } catch (error: any) {
-      const { logger, logError } = await import('../utils/logger');
+      const { logError } = await import('../utils/logger');
       logError('Error fetching documents', error, { 
         requestId: req.id,
         userId: req.user?.userId,
         role: req.user?.role,
       });
       // Return empty array instead of failing completely
-      res.json({
+      return res.json({
         success: true,
         data: [],
       } as ApiResponse);

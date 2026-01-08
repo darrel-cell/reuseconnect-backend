@@ -47,6 +47,7 @@ export interface TransformedBooking {
  */
 function transformStatus(status: BookingStatus): string {
   const statusMap: Record<BookingStatus, string> = {
+    'pending': 'pending',
     'created': 'created',
     'scheduled': 'scheduled',
     'collected': 'collected',

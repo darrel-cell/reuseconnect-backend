@@ -708,7 +708,7 @@ export class JobService {
         const clientUserId = clientUser?.id || booking.createdBy;
         
         // Map job status to booking status and notify client
-        if (newStatus === 'en_route' || newStatus === 'en-route') {
+        if (newStatus === 'en_route') {
           // Notify client that driver is en route (special notification)
           await notifyDriverEnRoute(
             booking.id,
@@ -901,6 +901,10 @@ export class JobService {
           }
         }
       }
+    }
+
+    if (!job) {
+      throw new Error('Failed to create or find job');
     }
 
     return this.getJobById(job.id);

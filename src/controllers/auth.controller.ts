@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/auth.service';
 import { AuthenticatedRequest, ApiResponse } from '../types';
-import { errorHandler } from '../utils/errors';
 
 const authService = new AuthService();
 
@@ -19,12 +18,12 @@ export class AuthController {
 
       const result = await authService.login(email, password);
 
-      res.json({
+      return res.json({
         success: true,
         data: result,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -47,12 +46,12 @@ export class AuthController {
         role,
       });
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: result,
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -67,12 +66,12 @@ export class AuthController {
 
       const user = await authService.getCurrentUser(req.user.userId);
 
-      res.json({
+      return res.json({
         success: true,
         data: { user },
       } as ApiResponse);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }
