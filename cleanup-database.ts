@@ -56,22 +56,12 @@ async function cleanupDatabase() {
     const deletedSites = await prisma.site.deleteMany({});
     console.log(`   ✅ Deleted ${deletedSites.count} sites\n`);
 
-    // Step 5: Delete all invoices (related to clients)
-    console.log('🧾 Deleting all invoices...');
-    const deletedInvoices = await prisma.invoice.deleteMany({});
-    console.log(`   ✅ Deleted ${deletedInvoices.count} invoices\n`);
-
-    // Step 6: Delete all commissions (related to clients/resellers)
-    console.log('💰 Deleting all commissions...');
-    const deletedCommissions = await prisma.commission.deleteMany({});
-    console.log(`   ✅ Deleted ${deletedCommissions.count} commissions\n`);
-
-    // Step 7: Delete all clients
+    // Step 5: Delete all clients
     console.log('👥 Deleting all clients...');
     const deletedClients = await prisma.client.deleteMany({});
     console.log(`   ✅ Deleted ${deletedClients.count} clients\n`);
 
-    // Step 8: Delete all documents (except those belonging to Reuse Connect ITAD Platform)
+    // Step 6: Delete all documents (except those belonging to Reuse Connect ITAD Platform)
     console.log('📄 Deleting documents from other tenants...');
     const deletedDocuments = await prisma.document.deleteMany({
       where: {
@@ -80,12 +70,12 @@ async function cleanupDatabase() {
     });
     console.log(`   ✅ Deleted ${deletedDocuments.count} documents from other tenants\n`);
 
-    // Step 9: Delete all invites (delete all invites, we'll keep only admins)
+    // Step 7: Delete all invites (delete all invites, we'll keep only admins)
     console.log('✉️  Deleting all invites...');
     const deletedInvites = await prisma.invite.deleteMany({});
     console.log(`   ✅ Deleted ${deletedInvites.count} invites\n`);
 
-    // Step 10: Delete all non-admin users (resellers, clients, drivers)
+    // Step 8: Delete all non-admin users (resellers, clients, drivers)
     // But keep admin users (they might be in any tenant, but we'll keep them)
     console.log('👤 Deleting non-admin users (resellers, clients, drivers)...');
     const deletedUsers = await prisma.user.deleteMany({
@@ -95,7 +85,7 @@ async function cleanupDatabase() {
     });
     console.log(`   ✅ Deleted ${deletedUsers.count} non-admin users\n`);
 
-    // Step 11: Delete all tenants except Reuse Connect ITAD Platform
+    // Step 9: Delete all tenants except Reuse Connect ITAD Platform
     console.log('🏢 Deleting all tenants except Reuse Connect ITAD Platform...');
     const deletedTenants = await prisma.tenant.deleteMany({
       where: {
@@ -104,7 +94,7 @@ async function cleanupDatabase() {
     });
     console.log(`   ✅ Deleted ${deletedTenants.count} tenants\n`);
 
-    // Step 12: Delete all admin users (we'll recreate them)
+    // Step 10: Delete all admin users (we'll recreate them)
     console.log('👤 Deleting all admin users...');
     const deletedAdmins = await prisma.user.deleteMany({
       where: {
@@ -113,15 +103,12 @@ async function cleanupDatabase() {
     });
     console.log(`   ✅ Deleted ${deletedAdmins.count} admin users\n`);
 
-    // Step 13: Delete all asset categories (we'll recreate them)
+    // Step 11: Delete all asset categories (we'll recreate them)
     console.log('📦 Deleting all asset categories...');
     const deletedCategories = await prisma.assetCategory.deleteMany({});
     console.log(`   ✅ Deleted ${deletedCategories.count} asset categories\n`);
 
-    // Step 14: Delete all asset categories from other tenants (if any exist)
-    // Categories are now global, but we're cleaning everything
-
-    // Step 15: Ensure Reuse Connect ITAD Platform tenant exists and is properly configured
+    // Step 12: Ensure Reuse Connect ITAD Platform tenant exists and is properly configured
     console.log('🏢 Ensuring Reuse Connect ITAD Platform tenant exists...');
     const finalTenant = await prisma.tenant.upsert({
       where: { id: reuseTenantId },
@@ -142,7 +129,7 @@ async function cleanupDatabase() {
     });
     console.log(`   ✅ Reuse Connect ITAD Platform tenant ready: ${finalTenant.name} (${finalTenant.id})\n`);
 
-    // Step 16: Create admin user
+    // Step 13: Create admin user
     console.log('👤 Creating admin user...');
     const adminEmail = 'admin@reuse.com';
     const adminPassword = 'admin123';
@@ -174,7 +161,7 @@ async function cleanupDatabase() {
     console.log(`      Password: ${adminPassword}`);
     console.log(`      Name: ${admin.name}\n`);
 
-    // Step 17: Create 7 asset categories
+    // Step 14: Create 7 asset categories
     console.log('📦 Creating asset categories...');
     const categories = [
       {
@@ -245,8 +232,6 @@ async function cleanupDatabase() {
     console.log(`   - Jobs deleted: ${deletedJobs.count}`);
     console.log(`   - Driver profiles deleted: ${deletedDriverProfiles.count}`);
     console.log(`   - Sites deleted: ${deletedSites.count}`);
-    console.log(`   - Invoices deleted: ${deletedInvoices.count}`);
-    console.log(`   - Commissions deleted: ${deletedCommissions.count}`);
     console.log(`   - Clients deleted: ${deletedClients.count}`);
     console.log(`   - Documents deleted: ${deletedDocuments.count}`);
     console.log(`   - Invites deleted: ${deletedInvites.count}`);
