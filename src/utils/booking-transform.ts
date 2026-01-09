@@ -9,6 +9,7 @@ export interface TransformedBooking {
   status: string;
   estimatedCO2e: number;
   estimatedBuyback: number;
+  charityPercent: number;
   createdAt: string;
   bookingNumber?: string;
   clientId?: string;
@@ -70,6 +71,7 @@ export function transformBookingForAPI(booking: any): TransformedBooking {
     status: transformStatus(booking.status),
     estimatedCO2e: booking.estimatedCO2e || 0,
     estimatedBuyback: booking.estimatedBuyback || 0,
+    charityPercent: booking.charityPercent ?? 0,
     createdAt: booking.createdAt instanceof Date 
       ? booking.createdAt.toISOString() 
       : booking.createdAt,
