@@ -61,14 +61,10 @@ async function cleanupDatabase() {
     const deletedClients = await prisma.client.deleteMany({});
     console.log(`   ✅ Deleted ${deletedClients.count} clients\n`);
 
-    // Step 6: Delete all documents (except those belonging to Reuse Connect ITAD Platform)
-    console.log('📄 Deleting documents from other tenants...');
-    const deletedDocuments = await prisma.document.deleteMany({
-      where: {
-        tenantId: { not: reuseTenantId },
-      },
-    });
-    console.log(`   ✅ Deleted ${deletedDocuments.count} documents from other tenants\n`);
+    // Step 6: Delete ALL documents (must be done before deleting users due to foreign key constraint)
+    console.log('📄 Deleting all documents...');
+    const deletedDocuments = await prisma.document.deleteMany({});
+    console.log(`   ✅ Deleted ${deletedDocuments.count} documents\n`);
 
     // Step 7: Delete all invites (delete all invites, we'll keep only admins)
     console.log('✉️  Deleting all invites...');
