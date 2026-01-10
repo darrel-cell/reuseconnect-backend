@@ -1,6 +1,36 @@
 // Road distance calculation using routing APIs
 // Falls back to straight-line distance if routing API is unavailable
 
+// OSRM API response types
+interface OSRMRoute {
+  distance: number; // Distance in meters
+  duration: number; // Duration in seconds
+  geometry?: string;
+}
+
+interface OSRMResponse {
+  code: string;
+  routes?: OSRMRoute[];
+  waypoints?: Array<{ location: [number, number] }>;
+}
+
+// OpenRouteService API response types
+interface OpenRouteServiceSummary {
+  distance: number; // Distance in meters
+  duration: number; // Duration in seconds
+}
+
+interface OpenRouteServiceRoute {
+  summary: OpenRouteServiceSummary;
+  geometry?: string;
+  segments?: unknown[];
+}
+
+interface OpenRouteServiceResponse {
+  routes?: OpenRouteServiceRoute[];
+  bbox?: [number, number, number, number];
+}
+
 /**
  * Calculate road distance using OSRM (Open Source Routing Machine) public API
  * This is free and doesn't require an API key, but has rate limits
@@ -31,7 +61,7 @@ async function calculateRoadDistanceOSRM(
       return null;
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as OSRMResponse;
     
     // OSRM returns distance in meters
     if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
@@ -79,7 +109,7 @@ async function calculateRoadDistanceOpenRouteService(
       return null;
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as OpenRouteServiceResponse;
     
     if (data.routes && data.routes.length > 0) {
       const distanceMeters = data.routes[0].summary?.distance;
