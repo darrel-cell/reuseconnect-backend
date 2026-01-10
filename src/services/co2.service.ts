@@ -25,15 +25,22 @@ export class CO2Service {
       throw new Error('No asset categories found');
     }
 
-    // Calculate distance
+    // Calculate distance using road distance (async)
     let distanceKm = data.distanceKm;
     if (!distanceKm && data.collectionLat && data.collectionLng) {
-      distanceKm = calculateRoundTripDistance(
-        data.collectionLat,
-        data.collectionLng,
-        config.warehouse.lat,
-        config.warehouse.lng
-      );
+      try {
+        distanceKm = await calculateRoundTripDistance(
+          data.collectionLat,
+          data.collectionLng,
+          config.warehouse.lat,
+          config.warehouse.lng,
+          config.routing?.openRouteServiceApiKey
+        );
+      } catch (error) {
+        console.error('Error calculating road distance:', error);
+        // Fallback to default distance if routing API fails
+        distanceKm = 80;
+      }
     }
     if (!distanceKm) {
       distanceKm = 80; // Default 80km round trip

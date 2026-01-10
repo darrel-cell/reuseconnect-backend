@@ -46,8 +46,16 @@ export interface CO2CalculationResult {
   };
 }
 
+// Import routing function
+import { calculateRoundTripRoadDistance } from './routing';
+
+// Export as calculateRoundTripDistance for backward compatibility
+// Note: This is now async and uses road distance instead of straight-line
+export { calculateRoundTripRoadDistance as calculateRoundTripDistance };
+
 /**
- * Calculate distance between two coordinates using Haversine formula
+ * Calculate distance between two coordinates using Haversine formula (for fallback/legacy use)
+ * Note: New code should use calculateRoadDistance from routing.ts for road distance
  */
 export function calculateDistance(
   lat1: number,
@@ -66,24 +74,6 @@ export function calculateDistance(
       Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
-}
-
-/**
- * Calculate round trip distance from collection site to warehouse
- */
-export function calculateRoundTripDistance(
-  collectionLat: number,
-  collectionLng: number,
-  warehouseLat: number,
-  warehouseLng: number
-): number {
-  const oneWay = calculateDistance(
-    collectionLat,
-    collectionLng,
-    warehouseLat,
-    warehouseLng
-  );
-  return oneWay * 2; // Round trip
 }
 
 /**

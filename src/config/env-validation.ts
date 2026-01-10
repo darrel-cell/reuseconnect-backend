@@ -49,6 +49,9 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.string().default('900000').transform(Number).pipe(z.number().int().positive()), // 15 minutes default
   RATE_LIMIT_MAX_REQUESTS: z.string().default('1000').transform(Number).pipe(z.number().int().positive()), // Higher default for development
   RATE_LIMIT_AUTH_MAX: z.string().default('20').transform(Number).pipe(z.number().int().positive()), // Auth endpoint limit
+  
+  // Routing API (optional - for road distance calculations)
+  OPENROUTESERVICE_API_KEY: z.string().optional(), // OpenRouteService API key (optional, falls back to OSRM if not provided)
 });
 
 // Validate environment variables
@@ -112,6 +115,9 @@ export const validatedConfig = {
     windowMs: env.RATE_LIMIT_WINDOW_MS,
     maxRequests: env.RATE_LIMIT_MAX_REQUESTS,
     authMax: env.RATE_LIMIT_AUTH_MAX,
+  },
+  routing: {
+    openRouteServiceApiKey: env.OPENROUTESERVICE_API_KEY,
   },
 };
 
