@@ -11,7 +11,9 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:cleanup": "tsx cleanup-database.ts"
+    "db:cleanup": "tsx cleanup-database.ts",
+    "db:check-buyback": "tsx check-buyback-values.ts",
+    "db:update-co2": "tsx update-co2-values.ts"
   },
   "keywords": [
     "itad",
