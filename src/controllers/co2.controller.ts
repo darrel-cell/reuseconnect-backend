@@ -54,12 +54,21 @@ export class CO2Controller {
       } as ApiResponse);
     } catch (error) {
       const { logger } = await import('../utils/logger');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
       logger.error('Error calculating CO2e', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
+        stack: errorStack,
       });
+      
+      // Include stack trace in development for debugging
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      
       return res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to calculate CO2e',
+        error: errorMessage,
+        ...(isDevelopment && errorStack && { stack: errorStack }),
       } as ApiResponse);
     }
   }

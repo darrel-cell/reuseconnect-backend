@@ -12,6 +12,7 @@ export const vehicleEmissions: Record<string, number> = {
 
 export interface AssetCategory {
   id: string;
+  name: string; // Category name (e.g., "Laptop", "Server")
   co2ePerUnit: number; // kg CO2e saved per unit reused
   avgWeight: number; // kg
   avgBuybackValue: number; // £
@@ -126,7 +127,160 @@ export function calculateReuseCO2e(
 }
 
 /**
- * Calculate buyback estimate
+ * Conservative buyback calculator constants
+ * Based on baseline: 3-year-old equipment, Grade B condition, bulk volumes
+ */
+
+// Average RRP values by category (GBP)
+const categoryAvgRRP: Record<string, number> = {
+  'Networking': 2000,
+  'Laptop': 1000,
+  'Server': 5000,
+  'Smart Phones': 700,
+  'Smartphone': 700,
+  'Smartphones': 700,
+  'Desktop': 900,
+  'Storage': 6000,
+  'Tablets': 600,
+  'Tablet': 600,
+};
+
+// Low residual percentages @ 3 years (R^c_low) - conservative bottom-quartile values
+const categoryResidualLow: Record<string, number> = {
+  'Networking': 0.15,    // 15%
+  'Laptop': 0.18,        // 18%
+  'Server': 0.08,        // 8%
+  'Smart Phones': 0.17,  // 17%
+  'Smartphone': 0.17,
+  'Smartphones': 0.17,
+  'Desktop': 0.09,       // 9%
+  'Storage': 0.05,       // 5%
+  'Tablets': 0.17,       // 17%
+  'Tablet': 0.17,
+};
+
+// Volume factor based on quantity (muted upside)
+function getVolumeFactor(quantity: number): number {
+  if (quantity >= 200) return 1.10;
+  if (quantity >= 50) return 1.06;
+  if (quantity >= 10) return 1.03;
+  return 1.00; // 1-9 items
+}
+
+// Floor and cap values by category (GBP)
+const categoryFloors: Record<string, number> = {
+  'Networking': 30,
+  'Laptop': 30,
+  'Server': 50,
+  'Smart Phones': 10,
+  'Smartphone': 10,
+  'Smartphones': 10,
+  'Desktop': 10,
+  'Storage': 50,
+  'Tablets': 15,
+  'Tablet': 15,
+};
+
+const categoryCaps: Record<string, number> = {
+  'Networking': 2000,
+  'Laptop': 600,
+  'Server': 2500,
+  'Smart Phones': 450,
+  'Smartphone': 450,
+  'Smartphones': 450,
+  'Desktop': 250,
+  'Storage': 3000,
+  'Tablets': 400,
+  'Tablet': 400,
+};
+
+/**
+ * Normalize category name for lookup
+ */
+function normalizeCategoryName(categoryName: string | undefined): string {
+  if (!categoryName) {
+    return '';
+  }
+  const normalized = categoryName.trim();
+  // Try exact match first
+  if (categoryAvgRRP[normalized]) return normalized;
+  
+  // Try case-insensitive match
+  for (const key in categoryAvgRRP) {
+    if (key.toLowerCase() === normalized.toLowerCase()) {
+      return key;
+    }
+  }
+  
+  // Try partial match
+  const normalizedLower = normalized.toLowerCase();
+  for (const key in categoryAvgRRP) {
+    if (normalizedLower.includes(key.toLowerCase()) || key.toLowerCase().includes(normalizedLower)) {
+      return key;
+    }
+  }
+  
+  return normalized;
+}
+
+/**
+ * Calculate conservative low-end buyback estimate per unit
+ * 
+ * Formula: buyback = (RRP × residual_low %) × volume_factor × condition_factor × age_factor × market_factor
+ * 
+ * Fixed values:
+ * - Age: 3 years (36 months) → age_factor = 1.0
+ * - Grade: B → condition_factor = 1.0
+ * - Market: default → market_factor = 1.0
+ * 
+ * Client inputs: category and quantity only
+ */
+function calculateBuybackPerUnit(
+  categoryName: string,
+  quantity: number
+): number {
+  // Normalize category name
+  const normalizedCategory = normalizeCategoryName(categoryName);
+  
+  // Get RRP and residual percentage
+  const avgRRP = categoryAvgRRP[normalizedCategory] || 0;
+  const residualLow = categoryResidualLow[normalizedCategory] || 0;
+  
+  if (avgRRP === 0 || residualLow === 0) {
+    // Fallback: return 0 if category not recognized
+    return 0;
+  }
+  
+  // Base buyback = RRP × residual_low %
+  const baseBuyback = avgRRP * residualLow;
+  
+  // Fixed factors (all 1.0 due to fixed conditions)
+  const ageFactor = 1.0;        // Fixed at 3 years
+  const conditionFactor = 1.0;  // Fixed at Grade B
+  const marketFactor = 1.0;     // Default market index
+  const specFactor = 1.0;       // Optional, default to 1.0 for conservative estimate
+  
+  // Variable factor
+  const volumeFactor = getVolumeFactor(quantity);
+  
+  // Calculate raw buyback value
+  const rawBuyback = baseBuyback * ageFactor * conditionFactor * volumeFactor * marketFactor * specFactor;
+  
+  // Apply floor and cap
+  const floor = categoryFloors[normalizedCategory] || 0;
+  const cap = categoryCaps[normalizedCategory] || Infinity;
+  
+  return Math.max(floor, Math.min(cap, rawBuyback));
+}
+
+/**
+ * Calculate buyback estimate (conservative low-end)
+ * 
+ * Uses conservative baseline formula:
+ * - 3-year-old equipment
+ * - Grade B condition
+ * - Low residual percentages (bottom-quartile)
+ * - Volume factor for bulk volumes
  */
 export function calculateBuybackEstimate(
   assets: Array<{ categoryId: string; quantity: number }>,
@@ -134,7 +288,10 @@ export function calculateBuybackEstimate(
 ): number {
   return assets.reduce((total, asset) => {
     const category = categories.find(c => c.id === asset.categoryId);
-    return total + (category?.avgBuybackValue || 0) * asset.quantity;
+    if (!category) return total;
+    
+    const buybackPerUnit = calculateBuybackPerUnit(category.name, asset.quantity);
+    return total + buybackPerUnit * asset.quantity;
   }, 0);
 }
 

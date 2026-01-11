@@ -19,6 +19,6 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*", "cleanup-database.ts"],
+  "include": ["src/**/*", "cleanup-database.ts", "update-co2-values.ts"],
   "exclude": ["node_modules", "dist"]
 }

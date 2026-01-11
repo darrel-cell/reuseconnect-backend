@@ -1,6 +1,9 @@
 // Road distance calculation using routing APIs
 // Falls back to straight-line distance if routing API is unavailable
 
+// Check if fetch is available (Node.js 18+)
+const fetchAvailable = typeof fetch !== 'undefined';
+
 // OSRM API response types
 interface OSRMRoute {
   distance: number; // Distance in meters
@@ -41,6 +44,11 @@ async function calculateRoadDistanceOSRM(
   lat2: number,
   lon2: number
 ): Promise<number | null> {
+  // Skip if fetch is not available (Node.js < 18)
+  if (!fetchAvailable) {
+    return null;
+  }
+  
   try {
     // OSRM route API format: /route/v1/{profile}/{coordinates}?overview=false
     // Use driving profile for road distance
@@ -48,14 +56,18 @@ async function calculateRoadDistanceOSRM(
     // For production, consider using a self-hosted OSRM instance or OpenRouteService
     const url = `http://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`;
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
       },
-      // Add timeout
-      signal: AbortSignal.timeout(5000), // 5 second timeout
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return null;
@@ -86,12 +98,16 @@ async function calculateRoadDistanceOpenRouteService(
   lon2: number,
   apiKey?: string
 ): Promise<number | null> {
-  if (!apiKey) {
+  // Skip if fetch is not available (Node.js < 18) or no API key
+  if (!fetchAvailable || !apiKey) {
     return null;
   }
 
   try {
     const url = `https://api.openrouteservice.org/v2/directions/driving-car`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
     
     const response = await fetch(url, {
       method: 'POST',
@@ -102,8 +118,10 @@ async function calculateRoadDistanceOpenRouteService(
       body: JSON.stringify({
         coordinates: [[lon1, lat1], [lon2, lat2]],
       }),
-      signal: AbortSignal.timeout(5000), // 5 second timeout
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return null;
