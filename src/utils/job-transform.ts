@@ -34,6 +34,7 @@ export interface TransformedJob {
     vehicleType: 'van' | 'truck' | 'car';
     vehicleFuelType?: 'petrol' | 'diesel' | 'electric';
     phone: string;
+    eta?: string;
   } | null;
   co2eSaved: number;
   travelEmissions: number;
@@ -121,14 +122,45 @@ export function transformJobForAPI(job: any): TransformedJob {
       gradingRecordId: asset.gradingRecordId,
       resaleValue: asset.resaleValue,
     })),
-    driver: job.driver ? {
-      id: job.driver.id,
-      name: job.driver.name,
-      vehicleReg: job.driver.driverProfile?.vehicleReg ?? 'N/A',
-      vehicleType: (job.driver.driverProfile?.vehicleType ?? 'van') as 'van' | 'truck' | 'car',
-      vehicleFuelType: (job.driver.driverProfile?.vehicleFuelType ?? 'diesel') as 'petrol' | 'diesel' | 'electric',
-      phone: job.driver.driverProfile?.phone ?? job.driver.phone ?? job.driver.email ?? 'N/A',
-    } : null,
+    driver: job.driver ? (() => {
+      const driverData = {
+        id: job.driver.id,
+        name: job.driver.name,
+        vehicleReg: job.driver.driverProfile?.vehicleReg ?? 'N/A',
+        vehicleType: (job.driver.driverProfile?.vehicleType ?? 'van') as 'van' | 'truck' | 'car',
+        vehicleFuelType: (job.driver.driverProfile?.vehicleFuelType ?? 'diesel') as 'petrol' | 'diesel' | 'electric',
+        phone: job.driver.driverProfile?.phone ?? job.driver.phone ?? job.driver.email ?? 'N/A',
+      };
+
+      let eta: string | undefined;
+      const scheduledDate = job.scheduledDate instanceof Date ? job.scheduledDate : new Date(job.scheduledDate);
+      const now = new Date();
+      
+      if (job.status === 'routed') {
+        eta = undefined;
+      } else if (job.status === 'en_route') {
+        if (scheduledDate > now) {
+          const roundTripDistanceKm = job.booking?.roundTripDistanceKm ?? null;
+          const oneWayDistanceKm = roundTripDistanceKm ? roundTripDistanceKm / 2 : null;
+          
+          if (oneWayDistanceKm && oneWayDistanceKm > 0) {
+            const averageSpeedKmh = 40;
+            const travelTimeMinutes = (oneWayDistanceKm / averageSpeedKmh) * 60;
+            const estimatedArrival = new Date(now.getTime() + travelTimeMinutes * 60 * 1000);
+            
+            const finalEta = estimatedArrival <= scheduledDate ? estimatedArrival : scheduledDate;
+            eta = finalEta.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          } else {
+            eta = scheduledDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          }
+        }
+      }
+
+      return {
+        ...driverData,
+        ...(eta ? { eta } : {}),
+      };
+    })() : null,
     co2eSaved: job.co2eSaved || 0,
     travelEmissions: job.travelEmissions || 0,
     buybackValue: job.buybackValue || 0,
