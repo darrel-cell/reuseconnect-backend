@@ -654,10 +654,6 @@ export async function generateChainOfCustodyPDF(
           doc.addPage();
           yPos = 40;
         }
-
-        // Removed background boxes - no background colors
-        
-        // Main term text (bold, larger font for better visibility)
         doc.fontSize(10)
           .font('Helvetica-Bold')
           .fillColor(textColor)

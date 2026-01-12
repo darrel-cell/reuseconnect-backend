@@ -170,11 +170,10 @@ export class BookingRepository {
 
   async findByReseller(resellerId: string, filters?: {
     status?: BookingStatus;
+    clientId?: string;
     limit?: number;
     offset?: number;
   }) {
-    // Resellers should see bookings that are explicitly linked to them via booking.resellerId
-    // OR bookings for clients whose Client record has resellerId = this reseller.
     const where: any = {
       OR: [
         { resellerId },
@@ -183,6 +182,9 @@ export class BookingRepository {
     };
     if (filters?.status) {
       where.status = filters.status;
+    }
+    if (filters?.clientId) {
+      where.clientId = filters.clientId;
     }
 
     return prisma.booking.findMany({

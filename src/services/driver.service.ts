@@ -363,9 +363,6 @@ export class DriverService {
       },
     });
 
-    // Delete the user account
-    // Note: Jobs will have driverId set to null automatically (ON DELETE SET NULL)
-    // Bookings createdBy/scheduledBy will remain (historical data)
     await prisma.user.delete({
       where: { id: userId },
     });

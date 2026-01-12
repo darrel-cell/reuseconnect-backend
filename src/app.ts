@@ -22,7 +22,6 @@ import gradingRoutes from './routes/grading.routes';
 import notificationRoutes from './routes/notification.routes';
 import organisationProfileRoutes from './routes/organisation-profile.routes';
 import documentRoutes from './routes/document.routes';
-import testEmailRoutes from './routes/test-email.routes';
 
 const app: Express = express();
 
@@ -188,11 +187,6 @@ app.use('/api/grading', gradingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/organisation-profile', organisationProfileRoutes);
 app.use('/api/documents', documentRoutes);
-
-// Test email route (for debugging - remove in production or add auth)
-if (process.env.NODE_ENV === 'development') {
-  app.use('/api/test-email', testEmailRoutes);
-}
 
 // Error handler (must be last)
 app.use(errorHandler);

@@ -1,10 +1,8 @@
-// CO2 Calculation utilities (matching frontend logic)
 
 export const vehicleEmissions: Record<string, number> = {
   petrol: 0.21, // kg CO2 per km
-  diesel: 0.19, // kg CO2 per km
-  electric: 0.0, // kg CO2 per km (zero tailpipe emissions)
-  // Legacy support
+  diesel: 0.19,
+  electric: 0.0,
   car: 0.17,
   van: 0.24,
   truck: 0.89,
@@ -50,32 +48,7 @@ export interface CO2CalculationResult {
 // Import routing function
 import { calculateRoundTripRoadDistance } from './routing';
 
-// Export as calculateRoundTripDistance for backward compatibility
-// Note: This is now async and uses road distance instead of straight-line
 export { calculateRoundTripRoadDistance as calculateRoundTripDistance };
-
-/**
- * Calculate distance between two coordinates using Haversine formula (for fallback/legacy use)
- * Note: New code should use calculateRoadDistance from routing.ts for road distance
- */
-export function calculateDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371; // Earth's radius in kilometers
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
 
 /**
  * Convert kilometers to miles
@@ -142,25 +115,14 @@ const co2eEquivalencies = {
 export function calculateCO2e(input: CO2CalculationInput): CO2CalculationResult {
   const { assets, distanceKm, vehicleType, categories } = input;
 
-  // Calculate reuse savings
   const reuseSavings = calculateReuseCO2e(assets, categories);
-
-  // Calculate distance (use provided or default)
-  const distance = distanceKm || 80; // Default 80km round trip
-
-  // Calculate emissions for all vehicle types
+  const distance = distanceKm || 80;
   const vehicleEmissionsAll = calculateAllVehicleEmissions(distance);
-
-  // Use selected vehicle type or default to petrol
   const selectedVehicleType = vehicleType || 'petrol';
   const travelEmissions = selectedVehicleType === 'electric'
     ? 0
     : (vehicleEmissionsAll[selectedVehicleType as keyof typeof vehicleEmissionsAll] ?? vehicleEmissionsAll.petrol);
-
-  // Calculate net impact
   const netImpact = reuseSavings - travelEmissions;
-
-  // Calculate equivalencies
   const equivalencies = {
     treesPlanted: co2eEquivalencies.treesPlanted(netImpact),
     householdDays: co2eEquivalencies.householdDays(netImpact),

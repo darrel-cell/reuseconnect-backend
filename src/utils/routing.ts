@@ -50,10 +50,7 @@ async function calculateRoadDistanceOSRM(
   }
   
   try {
-    // OSRM route API format: /route/v1/{profile}/{coordinates}?overview=false
-    // Use driving profile for road distance
-    // Note: OSRM public demo uses HTTP (router.project-osrm.org doesn't support HTTPS)
-    // For production, consider using a self-hosted OSRM instance or OpenRouteService
+    // OSRM public demo uses HTTP (router.project-osrm.org doesn't support HTTPS)
     const url = `http://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`;
     
     const controller = new AbortController();
@@ -197,10 +194,8 @@ export async function calculateRoadDistance(
     return distance;
   }
 
-  // Fallback to straight-line distance with a multiplier to approximate road distance
-  // Road distance is typically 1.2-1.5x straight-line distance in urban areas
   const straightDistance = calculateStraightLineDistance(lat1, lon1, lat2, lon2);
-  const estimatedRoadDistance = straightDistance * 1.3; // 30% increase as approximation
+  const estimatedRoadDistance = straightDistance * 1.3;
   
   console.warn(
     `Routing API unavailable, using estimated road distance (${estimatedRoadDistance.toFixed(2)}km) ` +
@@ -220,7 +215,6 @@ export async function calculateRoundTripRoadDistance(
   warehouseLng: number,
   openRouteServiceApiKey?: string
 ): Promise<number> {
-  // Calculate one-way road distance
   const oneWay = await calculateRoadDistance(
     collectionLat,
     collectionLng,
@@ -229,7 +223,5 @@ export async function calculateRoundTripRoadDistance(
     openRouteServiceApiKey
   );
   
-  // Round trip is simply double the one-way distance
-  // Note: We don't recalculate the return route separately as it should be similar
   return oneWay * 2;
 }

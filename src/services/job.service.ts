@@ -26,7 +26,6 @@ export class JobService {
       throw new ValidationError('Booking must have ERP job number before creating job');
     }
 
-    // Get driver info with profile
     const driver = await prisma.user.findUnique({
       where: { id: driverId },
       include: { driverProfile: true },
@@ -36,14 +35,10 @@ export class JobService {
       throw new NotFoundError('Driver', driverId);
     }
 
-    // Recalculate travel emissions based on driver's vehicle fuel type and vehicle type
-    // Priority: driver's vehicleFuelType > booking's preferredVehicleType > default 'van'
-    // Use booking's roundTripDistanceKm (distance from collection site to warehouse)
     const vehicleFuelType = driver.driverProfile?.vehicleFuelType || booking.preferredVehicleType || 'van';
-    const roundTripDistanceKm = booking.roundTripDistanceKm || 80; // Fallback to 80km if not set
+    const roundTripDistanceKm = booking.roundTripDistanceKm || 80;
     const travelEmissions = calculateTravelEmissions(roundTripDistanceKm, vehicleFuelType);
 
-    // Check if job already exists (created when booking was approved)
     let job: any = await jobRepo.findByBookingId(booking.id);
 
     if (job) {
@@ -124,7 +119,6 @@ export class JobService {
         driverId: driverId,
       });
 
-      // Create job assets from booking assets
       for (const bookingAsset of booking.assets) {
         await prisma.jobAsset.create({
           data: {
@@ -190,6 +184,7 @@ export class JobService {
     userRole: string;
     status?: JobStatus;
     clientName?: string;
+    clientId?: string;
     searchQuery?: string;
     limit?: number;
     offset?: number;
@@ -208,6 +203,11 @@ export class JobService {
         where.clientName = {
           contains: filters.clientName,
           mode: 'insensitive',
+        };
+      }
+      if (filters.clientId) {
+        where.booking = {
+          clientId: filters.clientId,
         };
       }
       if (filters.searchQuery) {
@@ -325,22 +325,105 @@ export class JobService {
         },
       };
     } else if (filters.userRole === 'driver') {
-      // Drivers can see all their jobs (for history)
-      // Access restriction to jobs at "warehouse" or beyond is handled at the UI level (DriverJobView)
-      const jobs = await jobRepo.findByDriver(filters.userId, {
-        status: filters.status,
-        limit,
-        offset,
-      });
-      const total = await prisma.job.count({
-        where: {
-          driverId: filters.userId,
-          ...(filters.status ? { status: filters.status } : {}),
+      // Drivers should only see active jobs (exclude "warehouse", "sanitised", "graded", "completed")
+      // Jobs at "warehouse" or beyond should only appear in Job History, not in active jobs list
+      const excludedStatuses = ['warehouse', 'sanitised', 'graded', 'completed'];
+      const where: any = {
+        driverId: filters.userId,
+        status: {
+          notIn: excludedStatuses,
         },
-      });
+      };
+      
+      // If a specific status filter is provided, apply it (but still exclude warehouse+ statuses)
+      if (filters.status && !excludedStatuses.includes(filters.status)) {
+        where.status = filters.status;
+      }
+      
+      const [data, total] = await Promise.all([
+        prisma.job.findMany({
+          where,
+          select: {
+            id: true,
+            erpJobNumber: true,
+            bookingId: true,
+            tenantId: true,
+            clientName: true,
+            siteName: true,
+            siteAddress: true,
+            status: true,
+            scheduledDate: true,
+            createdAt: true,
+            updatedAt: true,
+            booking: {
+              select: {
+                id: true,
+                bookingNumber: true,
+                client: {
+                  select: {
+                    id: true,
+                    name: true,
+                    organisationName: true,
+                  },
+                },
+                site: {
+                  select: {
+                    id: true,
+                    name: true,
+                    address: true,
+                    postcode: true,
+                  },
+                },
+                roundTripDistanceKm: true,
+                roundTripDistanceMiles: true,
+              },
+            },
+            assets: {
+              select: {
+                id: true,
+                categoryId: true,
+                categoryName: true,
+                quantity: true,
+                serialNumbers: true,
+                grade: true,
+                weight: true,
+                sanitised: true,
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                    co2ePerUnit: true,
+                    avgWeight: true,
+                    avgBuybackValue: true,
+                  },
+                },
+              },
+            },
+            driver: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                driverProfile: {
+                  select: {
+                    vehicleReg: true,
+                    vehicleType: true,
+                    vehicleFuelType: true,
+                    phone: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.job.count({ where }),
+      ]);
       
       return {
-        data: jobs,
+        data,
         pagination: {
           page: Math.floor(offset / limit) + 1,
           limit,
@@ -373,15 +456,22 @@ export class JobService {
       
       // Get bookings for these Client records OR bookings they created themselves
       // Exclude pending bookings - they should not appear in jobs list
+      const bookingWhere: any = {
+        tenantId: filters.tenantId,
+        status: { not: 'pending' }, // Exclude pending bookings
+        OR: [
+          { clientId: { in: clientIds } },
+          { createdBy: filters.userId },
+        ],
+      };
+      
+      // Add clientId filter if provided
+      if (filters.clientId) {
+        bookingWhere.clientId = filters.clientId;
+      }
+      
       const bookings = await prisma.booking.findMany({
-        where: {
-          tenantId: filters.tenantId,
-          status: { not: 'pending' }, // Exclude pending bookings
-          OR: [
-            { clientId: { in: clientIds } },
-            { createdBy: filters.userId },
-          ],
-        },
+        where: bookingWhere,
         select: { id: true },
       });
       
@@ -504,7 +594,11 @@ export class JobService {
       };
     } else if (filters.userRole === 'reseller') {
       // Resellers see jobs for their clients' bookings
-      const bookings = await bookingRepo.findByReseller(filters.userId);
+      const bookingFilters: any = {};
+      if (filters.clientId) {
+        bookingFilters.clientId = filters.clientId;
+      }
+      const bookings = await bookingRepo.findByReseller(filters.userId, bookingFilters);
       const bookingIds = bookings.map(b => b.id);
       
       if (bookingIds.length === 0) {
@@ -812,9 +906,6 @@ export class JobService {
       }
     }
 
-    // Notify admins of job status changes for warehouse, sanitised, completed
-    // Note: 'graded' status notification is handled by notifyGradedForApproval in booking.service.ts
-    // to avoid duplicate notifications and provide more specific messaging
     if (['warehouse', 'sanitised', 'completed'].includes(newStatus)) {
       // Admins are global across tenants (can see all jobs), so don't filter by tenantId
       const adminUsers = await prisma.user.findMany({

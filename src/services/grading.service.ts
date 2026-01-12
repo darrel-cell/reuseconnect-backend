@@ -18,18 +18,14 @@ export interface GradingRecordData {
   condition?: string;
 }
 
-// Grade-based resale value multipliers (per unit)
-const gradeMultipliers: Record<string, number> = {
-  'A': 1.0,      // Full value
-  'B': 0.7,      // 70% value
-  'C': 0.4,      // 40% value
-  'D': 0.2,      // 20% value
+const gradeConditionFactors: Record<string, number> = {
+  'A': 1.05,     // 105% of Grade B baseline
+  'B': 1.0,      // Baseline (100%)
+  'C': 0.70,     // 70% of Grade B baseline
+  'D': 0.25,     // 25% of Grade B baseline
   'Recycled': 0, // No resale value
 };
 
-// Base resale values by category (per unit) - FALLBACK ONLY
-// Primary source should be database avgBuybackValue
-// These must match the exact category names in the database (case-sensitive matching)
 const baseResaleValues: Record<string, number> = {
   'Laptop': 150,
   'Desktop': 80,
@@ -108,7 +104,6 @@ export class GradingService {
       throw new NotFoundError('Booking', bookingId);
     }
 
-    // Find the job for this booking
     const job = await prisma.job.findUnique({
       where: { bookingId },
       include: {
@@ -130,105 +125,95 @@ export class GradingService {
       throw new NotFoundError('Asset', assetId);
     }
 
-    // Check if already graded
     if (jobAsset.grade) {
       throw new ValidationError('Asset has already been graded');
     }
 
-    // Calculate resale value based on grade and category
-    // PRIORITY: Use database avgBuybackValue first (most reliable)
-    let baseValue = 0;
-    
-    // Log category info (debug level)
     const { logger } = await import('../utils/logger');
-    logger.debug('Grading category info', {
-      assetCategory,
-      jobAssetCategoryName: jobAsset.categoryName,
-      categoryId: jobAsset.categoryId,
-      hasCategory: !!jobAsset.category,
-      categoryName: jobAsset.category?.name,
-      avgBuybackValue: jobAsset.category?.avgBuybackValue,
+    
+    const config = await prisma.buybackConfig.findUnique({
+      where: { id: 'singleton' },
     });
     
-    // First, try to use the category's avgBuybackValue from the database
-    // This is the PRIMARY source - database values are most reliable
-    if (jobAsset.category && jobAsset.category.avgBuybackValue != null && jobAsset.category.avgBuybackValue > 0) {
-      baseValue = jobAsset.category.avgBuybackValue;
-      logger.debug('Using avgBuybackValue from database', {
-        categoryName: jobAsset.category.name,
-        avgBuybackValue: baseValue,
-      });
-    } else if (jobAsset.category) {
-      // Category exists but avgBuybackValue is 0 or null - try to fetch it directly
-      const category = await prisma.assetCategory.findUnique({
-        where: { id: jobAsset.categoryId },
-        select: { avgBuybackValue: true, name: true },
-      });
-      
-      if (category && category.avgBuybackValue && category.avgBuybackValue > 0) {
-        baseValue = category.avgBuybackValue;
-        logger.debug('Fetched avgBuybackValue directly from database', {
-          categoryName: category.name,
-          avgBuybackValue: baseValue,
-        });
-      }
+    const volumeFactor10 = config?.volumeFactor10 ?? 1.03;
+    const volumeFactor50 = config?.volumeFactor50 ?? 1.06;
+    const volumeFactor200 = config?.volumeFactor200 ?? 1.10;
+    const ageFactor = config?.ageFactor ?? 1.0; // Fixed at 3 years
+    const marketFactor = config?.marketFactor ?? 1.0;
+    
+    // Get volume factor based on quantity
+    const getVolumeFactor = (quantity: number): number => {
+      if (quantity >= 200) return volumeFactor200;
+      if (quantity >= 50) return volumeFactor50;
+      if (quantity >= 10) return volumeFactor10;
+      return 1.00; // 1-9 items
+    };
+    
+    // Get category from database
+    const category = jobAsset.category || await prisma.assetCategory.findUnique({
+      where: { id: jobAsset.categoryId },
+    });
+    
+    if (!category) {
+      throw new ValidationError(`Category not found for asset: ${assetId}`);
     }
     
-    // If database value is still not available, try to match category name to hardcoded values
-    if (baseValue === 0) {
-      // Use the category name from the job asset (more reliable than the parameter)
-      const categoryNameToMatch = (jobAsset.categoryName || jobAsset.category?.name || assetCategory).toLowerCase().trim();
+    // Calculate base buyback using RRP × residualLow (same as buyback calculator)
+    let baseBuyback: number;
+    
+    if (category.avgRRP != null && category.residualLow != null) {
+      // Use new database fields (RRP × residual_low %)
+      baseBuyback = category.avgRRP * category.residualLow;
+    } else if (category.avgBuybackValue != null && category.avgBuybackValue > 0) {
+      // Fallback to avgBuybackValue (already includes RRP × residual %)
+      baseBuyback = category.avgBuybackValue;
+    } else {
+      // Last resort: use hardcoded fallback
+      const categoryNameToMatch = (category.name || assetCategory).toLowerCase().trim();
+      baseBuyback = baseResaleValues[categoryNameToMatch] || 0;
       
-      
-      // First, try exact match (case-insensitive)
-      for (const [key, value] of Object.entries(baseResaleValues)) {
-        if (categoryNameToMatch === key.toLowerCase()) {
-          baseValue = value;
-          break;
-        }
-      }
-      
-      // If no exact match, try partial matching (e.g., "Laptop" matches "laptop")
-      if (baseValue === 0) {
+      if (baseBuyback === 0) {
         for (const [key, value] of Object.entries(baseResaleValues)) {
-          const keyLower = key.toLowerCase();
-          // Check if category name contains the key or vice versa
-          if (categoryNameToMatch.includes(keyLower) || keyLower.includes(categoryNameToMatch)) {
-            baseValue = value;
-            break;
-          }
-        }
-      }
-      
-      // If still no match, try word-by-word matching (e.g., "Laptop Computer" matches "laptop")
-      if (baseValue === 0) {
-        const categoryWords = categoryNameToMatch.split(/\s+/);
-        for (const [key, value] of Object.entries(baseResaleValues)) {
-          const keyLower = key.toLowerCase();
-          if (categoryWords.some(word => word === keyLower || word.includes(keyLower) || keyLower.includes(word))) {
-            baseValue = value;
+          if (categoryNameToMatch.includes(key.toLowerCase()) || key.toLowerCase().includes(categoryNameToMatch)) {
+            baseBuyback = value;
             break;
           }
         }
       }
     }
     
-    // If still no match, default to 0 (will result in 0 resale value)
+    if (baseBuyback === 0) {
+      logger.warn('No buyback values found for category', {
+        categoryId: jobAsset.categoryId,
+        categoryName: category.name,
+      });
+      baseBuyback = 0;
+    }
     
-    const multiplier = gradeMultipliers[grade] || 0;
-    const resaleValuePerUnit = Math.round(baseValue * multiplier);
-    const totalResaleValue = resaleValuePerUnit * jobAsset.quantity;
+    // Get grade-based condition factor
+    const conditionFactor = gradeConditionFactors[grade] || 0;
+    
+    const volumeFactor = getVolumeFactor(jobAsset.quantity);
+    const rawResaleValuePerUnit = baseBuyback * ageFactor * conditionFactor * volumeFactor * marketFactor;
+    
+    // Apply floor and cap from database
+    const floor = category.buybackFloor ?? 0;
+    const cap = category.buybackCap ?? Infinity;
+    
+    const resaleValuePerUnit = Math.max(floor, Math.min(cap, rawResaleValuePerUnit));
+    const totalResaleValue = Math.round(resaleValuePerUnit * jobAsset.quantity * 100) / 100;
     
     // Log resale value calculation (debug level)
-    const categoryNameToMatchForLog = (jobAsset.categoryName || jobAsset.category?.name || assetCategory).toLowerCase().trim();
-    logger.debug('Resale value calculation', {
+    logger.debug('Resale value calculation (buyback calculator logic)', {
       assetCategory,
-      categoryNameToMatch: categoryNameToMatchForLog,
-      jobAssetCategoryName: jobAsset.categoryName,
-      categoryName: jobAsset.category?.name,
-      baseValue,
+      categoryName: category.name,
+      categoryId: jobAsset.categoryId,
+      baseBuyback,
       grade,
-      multiplier,
+      conditionFactor,
+      volumeFactor,
+      ageFactor,
+      marketFactor,
       resaleValuePerUnit,
       quantity: jobAsset.quantity,
       totalResaleValue,
@@ -247,11 +232,7 @@ export class GradingService {
       },
     });
 
-    // Note: Status change and notifications are handled when admin clicks
-    // "Approve & Move to Graded" button, not automatically when all assets are graded
-    // This allows admin to review all grading records before moving to next stage
-
-    // Return the grading record
+    return gradingRecord;
     return {
       id: gradingRecordId,
       bookingId,
@@ -268,12 +249,29 @@ export class GradingService {
 
   /**
    * Calculate resale value for a category and grade
-   * This method queries the database to get the actual avgBuybackValue from the category
+   * Uses buyback calculator logic with grade-based condition factor
    */
   async calculateResaleValue(category: string, grade: 'A' | 'B' | 'C' | 'D' | 'Recycled', quantity: number): Promise<number> {
-    let baseValue = 0;
+    // Get buyback config for factors
+    const config = await prisma.buybackConfig.findUnique({
+      where: { id: 'singleton' },
+    });
     
-    // First, try to find the category in the database by name (case-insensitive)
+    const volumeFactor10 = config?.volumeFactor10 ?? 1.03;
+    const volumeFactor50 = config?.volumeFactor50 ?? 1.06;
+    const volumeFactor200 = config?.volumeFactor200 ?? 1.10;
+    const ageFactor = config?.ageFactor ?? 1.0; // Fixed at 3 years
+    const marketFactor = config?.marketFactor ?? 1.0;
+    
+    // Get volume factor based on quantity
+    const getVolumeFactor = (qty: number): number => {
+      if (qty >= 200) return volumeFactor200;
+      if (qty >= 50) return volumeFactor50;
+      if (qty >= 10) return volumeFactor10;
+      return 1.00; // 1-9 items
+    };
+    
+    // Find category in database (case-insensitive)
     const categoryRecord = await prisma.assetCategory.findFirst({
       where: {
         name: {
@@ -281,50 +279,56 @@ export class GradingService {
           mode: 'insensitive',
         },
       },
-      select: {
-        avgBuybackValue: true,
-        name: true,
-      },
     });
     
-    if (categoryRecord && categoryRecord.avgBuybackValue && categoryRecord.avgBuybackValue > 0) {
-      baseValue = categoryRecord.avgBuybackValue;
-    } else {
-      // Fallback to hardcoded values if category not found in database
+    if (!categoryRecord) {
       const categoryLower = category.toLowerCase().trim();
+      let baseBuyback = baseResaleValues[categoryLower] || 0;
       
-      // Try exact match first
-      baseValue = baseResaleValues[categoryLower] || 0;
-      
-      // If no exact match, try partial matching
-      if (baseValue === 0) {
+      if (baseBuyback === 0) {
         for (const [key, value] of Object.entries(baseResaleValues)) {
           const keyLower = key.toLowerCase();
           if (categoryLower.includes(keyLower) || keyLower.includes(categoryLower)) {
-            baseValue = value;
+            baseBuyback = value;
             break;
           }
         }
       }
       
-      // Try word-by-word matching
-      if (baseValue === 0) {
-        const categoryWords = categoryLower.split(/\s+/);
-        for (const [key, value] of Object.entries(baseResaleValues)) {
-          const keyLower = key.toLowerCase();
-          if (categoryWords.some(word => word === keyLower || word.includes(keyLower) || keyLower.includes(word))) {
-            baseValue = value;
-            break;
-          }
-        }
+      if (baseBuyback === 0) {
+        return 0; // Category not found and no fallback
       }
       
+      const conditionFactor = gradeConditionFactors[grade] || 0;
+      const volumeFactor = getVolumeFactor(quantity);
+      const resaleValuePerUnit = baseBuyback * ageFactor * conditionFactor * volumeFactor * marketFactor;
+      return Math.round(resaleValuePerUnit * quantity * 100) / 100;
     }
     
-    const multiplier = gradeMultipliers[grade] || 0;
-    const resaleValuePerUnit = Math.round(baseValue * multiplier);
-    const totalResaleValue = resaleValuePerUnit * quantity;
+    // Calculate base buyback using RRP × residualLow (same as buyback calculator)
+    let baseBuyback: number;
     
+    if (categoryRecord.avgRRP != null && categoryRecord.residualLow != null) {
+      // Use new database fields (RRP × residual_low %)
+      baseBuyback = categoryRecord.avgRRP * categoryRecord.residualLow;
+    } else if (categoryRecord.avgBuybackValue != null && categoryRecord.avgBuybackValue > 0) {
+      // Fallback to avgBuybackValue (already includes RRP × residual %)
+      baseBuyback = categoryRecord.avgBuybackValue;
+    } else {
+      return 0; // No buyback values available
+    }
+    
+    // Get grade-based condition factor
+    const conditionFactor = gradeConditionFactors[grade] || 0;
+    
+    const volumeFactor = getVolumeFactor(quantity);
+    const rawResaleValuePerUnit = baseBuyback * ageFactor * conditionFactor * volumeFactor * marketFactor;
+    
+    const floor = categoryRecord.buybackFloor ?? 0;
+    const cap = categoryRecord.buybackCap ?? Infinity;
+    
+    const resaleValuePerUnit = Math.max(floor, Math.min(cap, rawResaleValuePerUnit));
+    const totalResaleValue = Math.round(resaleValuePerUnit * quantity * 100) / 100;
     
     return totalResaleValue;
   }

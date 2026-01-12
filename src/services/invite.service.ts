@@ -42,7 +42,6 @@ export class InviteService {
   async createInvite(data: CreateInviteData) {
     const { email, role, invitedBy, tenantId, tenantName } = data;
 
-    // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
@@ -51,7 +50,6 @@ export class InviteService {
       throw new BadRequestError('This email address is already registered. Please use a different email address.');
     }
 
-    // Check if there's an active (non-expired, non-accepted) invite for this email and tenant
     const existingInvite = await prisma.invite.findFirst({
       where: {
         email,
@@ -89,11 +87,9 @@ export class InviteService {
       throw new Error('Failed to generate unique invite token');
     }
 
-    // Set expiration to 14 days from now
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 14);
 
-    // Create invitation
     const invite = await prisma.invite.create({
       data: {
         email,
@@ -174,12 +170,9 @@ export class InviteService {
       throw new NotFoundError('Invitation not found');
     }
 
-    // Check if expired
     if (new Date(invite.expiresAt) < new Date()) {
       throw new BadRequestError('This invitation has expired');
     }
-
-    // Check if already accepted
     if (invite.acceptedAt) {
       throw new BadRequestError('This invitation has already been accepted');
     }
@@ -204,7 +197,6 @@ export class InviteService {
   async acceptInvite(data: AcceptInviteData) {
     const { inviteToken, email, name, password } = data;
 
-    // Get invitation
     const invite = await prisma.invite.findUnique({
       where: { token: inviteToken },
     });
@@ -213,17 +205,13 @@ export class InviteService {
       throw new NotFoundError('Invitation not found');
     }
 
-    // Verify email matches
     if (invite.email !== email) {
       throw new BadRequestError('Email does not match the invitation');
     }
 
-    // Check if expired
     if (new Date(invite.expiresAt) < new Date()) {
       throw new BadRequestError('This invitation has expired');
     }
-
-    // Check if already accepted
     if (invite.acceptedAt) {
       throw new BadRequestError('This invitation has already been accepted');
     }
@@ -256,7 +244,6 @@ export class InviteService {
         throw new BadRequestError('A user with this email already exists');
       }
     } else {
-      // Create user account (invited users are automatically approved/active)
       user = await prisma.user.create({
         data: {
           email,
@@ -272,7 +259,6 @@ export class InviteService {
       });
     }
 
-    // Get inviter information for client creation (if needed)
     const inviter = await prisma.user.findUnique({
       where: { id: invite.invitedBy },
       select: { id: true, role: true, name: true },
@@ -291,9 +277,6 @@ export class InviteService {
         },
       });
     }
-    // Note: For drivers, we DO NOT auto-create a DriverProfile here.
-    // The driver must complete their profile (vehicle details) from the Settings page
-    // before they can be used in operations like job assignment.
 
     // Mark invitation as accepted
     await prisma.invite.update({
@@ -450,7 +433,6 @@ export class InviteService {
       throw new BadRequestError('Cannot cancel an accepted invitation');
     }
 
-    // Delete the invitation
     await prisma.invite.delete({
       where: { id: inviteId },
     });

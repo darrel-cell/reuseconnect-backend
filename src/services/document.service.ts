@@ -14,9 +14,6 @@ export class DocumentService {
    * This is called automatically when job status changes to 'warehouse' (after assets delivered to warehouse)
    */
   async generateChainOfCustody(jobId: string, generatedBy: string): Promise<string> {
-    // Get job with all related data
-    // Note: When using 'include', Prisma returns all base fields of the Job model automatically
-    // The journey fields (dial2Collection, securityRequirements, etc.) are base fields and will be included
     const job = await prisma.job.findUnique({
       where: { id: jobId },
       include: {

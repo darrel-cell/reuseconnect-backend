@@ -127,11 +127,7 @@ export class SanitisationService {
       },
     });
 
-    // Note: Status change and notifications are handled when admin clicks
-    // "Approve & Move to Grading" button, not automatically when all assets are sanitised
-    // This allows admin to review all sanitisation records before moving to next stage
-
-    // Return the sanitisation record
+    return sanitisationRecord;
     return {
       id: certificateId,
       bookingId,

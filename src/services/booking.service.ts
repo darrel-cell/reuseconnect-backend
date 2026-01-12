@@ -735,9 +735,6 @@ export class BookingService {
       }
     }
 
-    // Note: We don't send "Booking scheduled" notification here because
-    // we already sent "Driver assigned" notification above, which replaces it
-
     return this.getBookingById(booking.id);
   }
 
@@ -947,10 +944,7 @@ export class BookingService {
       }
     }
 
-    // Also notify driver if booking has a driver assigned and status change is admin-initiated
-    // (Driver notifications for job status changes are handled in job.service.ts)
-    // Note: Only notify driver for 'scheduled' status (maps to 'routed' job status)
-    // Other status changes are handled by job.service.ts when job status changes
+    // Notify driver if booking has a driver assigned and status change is admin-initiated
     if (booking.driverId && newStatus === 'scheduled') {
       const { notifyJobStatusChange } = await import('../utils/notifications');
       const jobRepo = new JobRepository();

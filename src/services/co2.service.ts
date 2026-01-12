@@ -16,7 +16,6 @@ export class CO2Service {
     vehicleType?: 'petrol' | 'diesel' | 'electric';
     tenantId: string;
   }) {
-    // Get asset categories from database (global - no tenant filtering)
     const categories = await prisma.assetCategory.findMany({
       orderBy: { name: 'asc' },
     });
@@ -25,7 +24,6 @@ export class CO2Service {
       throw new Error('No asset categories found');
     }
 
-    // Calculate distance using road distance (async)
     let distanceKm = data.distanceKm;
     if (!distanceKm && data.collectionLat && data.collectionLng) {
       try {
@@ -57,16 +55,12 @@ export class CO2Service {
       avgBuybackValue: cat.avgBuybackValue,
     }));
 
-    // Calculate CO2e
     const result = calculateCO2e({
       assets: data.assets,
       distanceKm,
       vehicleType: data.vehicleType,
       categories: categoryData,
     });
-
-    // Note: Buyback calculation is now handled by BuybackService
-    // This method only returns CO2 calculation results
 
     return result;
   }
@@ -89,7 +83,6 @@ export class CO2Service {
     flightHours: number;
     calculationType: 'pre_job' | 'post_job';
   }) {
-    // Delete existing result if updating
     await prisma.cO2Result.deleteMany({
       where: { jobId },
     });

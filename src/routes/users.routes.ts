@@ -32,6 +32,17 @@ router.get(
       if (req.query.status) {
         where.status = req.query.status;
       }
+      
+      // Filter by tenantId if provided
+      if (req.query.tenantId) {
+        where.tenantId = req.query.tenantId;
+      }
+      
+      // Filter by isActive if provided (convert to status filter)
+      if (req.query.isActive !== undefined) {
+        const isActive = req.query.isActive === 'true' || req.query.isActive === true;
+        where.status = isActive ? 'active' : { not: 'active' };
+      }
 
       const users = await prisma.user.findMany({
         where,

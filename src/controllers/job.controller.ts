@@ -43,12 +43,12 @@ export class JobController {
         userRole: req.user.role,
         status: req.query.status as any,
         clientName: req.query.clientName as string,
+        clientId: req.query.clientId as string,
         searchQuery: req.query.searchQuery as string,
         limit,
         offset,
       });
 
-      // Type guard: check if result has the expected structure
       if (!result || Array.isArray(result) || !('data' in result) || !('pagination' in result)) {
         return res.json({
           success: true,
@@ -122,7 +122,6 @@ export class JobController {
 
       const { id } = req.params;
       
-      // Handle both direct properties and nested evidence object (frontend sends nested)
       const evidenceData = req.body.evidence || req.body;
       const { photos, signature, sealNumbers, notes, status } = evidenceData;
 
