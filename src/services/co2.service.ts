@@ -1,6 +1,6 @@
 // CO2 Calculation Service
 
-import { calculateCO2e, calculateRoundTripDistance, calculateBuybackEstimate } from '../utils/co2';
+import { calculateCO2e, calculateRoundTripDistance } from '../utils/co2';
 import { config } from '../config/env';
 import prisma from '../config/database';
 
@@ -65,13 +65,10 @@ export class CO2Service {
       categories: categoryData,
     });
 
-    // Calculate buyback estimate
-    const estimatedBuyback = calculateBuybackEstimate(data.assets, categoryData);
+    // Note: Buyback calculation is now handled by BuybackService
+    // This method only returns CO2 calculation results
 
-    return {
-      ...result,
-      estimatedBuyback,
-    };
+    return result;
   }
 
   /**

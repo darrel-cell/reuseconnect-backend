@@ -139,7 +139,14 @@ model AssetCategory {
   icon           String?
   co2ePerUnit    Float    // kg CO2e saved per unit reused
   avgWeight      Float    // kg
-  avgBuybackValue Float   // £
+  avgBuybackValue Float   // £ Base buyback (RRP × residual %)
+  
+  // Buyback calculation parameters
+  avgRRP         Float?   // Average Retail Price (£)
+  residualLow    Float?   // Residual percentage (e.g., 0.15 = 15%)
+  buybackFloor   Float?   // Minimum buyback value (£)
+  buybackCap     Float?   // Maximum buyback value (£)
+  
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -464,6 +471,18 @@ model BuybackResult {
   updatedAt       DateTime @updatedAt
 
   @@index([jobId])
+}
+
+// Buyback Configuration (Global settings for buyback calculation)
+model BuybackConfig {
+  id              String   @id @default("singleton")
+  volumeFactor10  Float    @default(1.03)  // For 10-49 items
+  volumeFactor50  Float    @default(1.06)  // For 50-199 items
+  volumeFactor200 Float    @default(1.10)  // For 200+ items
+  ageFactor       Float    @default(1.0)   // Fixed at 3 years
+  conditionFactor Float    @default(1.0)   // Fixed at Grade B
+  marketFactor    Float    @default(1.0)   // Default market index
+  updatedAt       DateTime @updatedAt
 }
 
 // Finance Status (ERP-owned, we just track)

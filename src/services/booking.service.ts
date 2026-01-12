@@ -3,6 +3,7 @@
 import { BookingRepository } from '../repositories/booking.repository';
 import { JobRepository } from '../repositories/job.repository';
 import { CO2Service } from './co2.service';
+import { BuybackService } from './buyback.service';
 import { mockERPService } from './mock-erp.service';
 import { isValidBookingTransition, isValidJobTransition } from '../middleware/workflow';
 import { ValidationError, NotFoundError } from '../utils/errors';
@@ -13,6 +14,7 @@ import prisma from '../config/database';
 
 const bookingRepo = new BookingRepository();
 const co2Service = new CO2Service();
+const buybackService = new BuybackService();
 
 export class BookingService {
   /**
@@ -36,13 +38,18 @@ export class BookingService {
     resellerName?: string;
     createdBy: string;
   }) {
-    // Calculate CO2e and buyback estimate
+    // Calculate CO2e
     const co2Result = await co2Service.calculateBookingCO2e({
       assets: data.assets,
       collectionLat: data.lat,
       collectionLng: data.lng,
       vehicleType: data.preferredVehicleType as any,
       tenantId: data.tenantId,
+    });
+
+    // Calculate buyback estimate separately
+    const estimatedBuyback = await buybackService.calculateBuybackEstimate({
+      assets: data.assets,
     });
 
     // Ensure Client record exists (for foreign key constraint)
@@ -155,7 +162,7 @@ export class BookingService {
       status: 'pending',
       charityPercent: data.charityPercent || 0,
       estimatedCO2e: co2Result.reuseSavings,
-      estimatedBuyback: co2Result.estimatedBuyback,
+      estimatedBuyback,
       preferredVehicleType: data.preferredVehicleType,
       roundTripDistanceKm: co2Result.distanceKm,
       roundTripDistanceMiles: co2Result.distanceMiles,

@@ -61,15 +61,13 @@ DATABASE_URL="postgresql://user:password@localhost:5432/itad_db?schema=public"
 3. Generate Prisma client and push schema:
 
 ```bash
-npm run db:generate
-npm run db:push
+npm run db:push          # Recommended for development (no shadow DB needed)
+npm run db:generate      # Regenerate Prisma Client
 ```
 
-Or use migrations:
+**Note:** Use `db:push` for development to avoid shadow database errors. See `DATABASE_WORKFLOW.md` for details.
 
-```bash
-npm run db:migrate
-```
+For production, use `npx prisma migrate deploy` or continue using `db:push`.
 
 ### 3. Environment Variables
 
