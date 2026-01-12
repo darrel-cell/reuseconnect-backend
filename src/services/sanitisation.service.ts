@@ -127,7 +127,6 @@ export class SanitisationService {
       },
     });
 
-    return sanitisationRecord;
     return {
       id: certificateId,
       bookingId,

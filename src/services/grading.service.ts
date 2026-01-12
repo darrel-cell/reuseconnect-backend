@@ -232,7 +232,6 @@ export class GradingService {
       },
     });
 
-    return gradingRecord;
     return {
       id: gradingRecordId,
       bookingId,

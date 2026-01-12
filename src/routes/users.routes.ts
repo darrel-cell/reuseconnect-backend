@@ -38,9 +38,8 @@ router.get(
         where.tenantId = req.query.tenantId;
       }
       
-      // Filter by isActive if provided (convert to status filter)
       if (req.query.isActive !== undefined) {
-        const isActive = req.query.isActive === 'true' || req.query.isActive === true;
+        const isActive = req.query.isActive === 'true';
         where.status = isActive ? 'active' : { not: 'active' };
       }
 
