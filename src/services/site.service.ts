@@ -223,6 +223,11 @@ export class SiteService {
         }
       }
 
+      // At this point, clientId should be defined
+      if (!clientId) {
+        throw new ValidationError('clientId is required');
+      }
+
       // Verify client exists and belongs to tenant
       const client = await prisma.client.findUnique({
         where: { id: clientId },
@@ -277,8 +282,8 @@ export class SiteService {
    */
   async updateSite(siteId: string, data: UpdateSiteData, userId: string, tenantId: string, userRole: string) {
     try {
-      // Get existing site
-      const existingSite = await this.getSiteById(siteId, userId, tenantId, userRole);
+      // Verify site exists and user has access (getSiteById throws if not found/unauthorized)
+      await this.getSiteById(siteId, userId, tenantId, userRole);
 
       // Update site
       const site = await prisma.site.update({
