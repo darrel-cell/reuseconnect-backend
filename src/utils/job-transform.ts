@@ -137,9 +137,15 @@ export function transformJobForAPI(job: any): TransformedJob {
       const now = new Date();
       
       if (job.status === 'routed') {
-        eta = undefined;
+        // Driver hasn't started traveling yet - no ETA available
+        eta = undefined; // Will display as "--:--" on frontend
       } else if (job.status === 'en_route') {
+        // Driver is currently traveling
         if (scheduledDate > now) {
+          // Scheduled time hasn't passed - show scheduled arrival time
+          eta = scheduledDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        } else {
+          // Scheduled time has passed - calculate from current time + travel time
           const roundTripDistanceKm = job.booking?.roundTripDistanceKm ?? null;
           const oneWayDistanceKm = roundTripDistanceKm ? roundTripDistanceKm / 2 : null;
           
@@ -147,10 +153,9 @@ export function transformJobForAPI(job: any): TransformedJob {
             const averageSpeedKmh = 40;
             const travelTimeMinutes = (oneWayDistanceKm / averageSpeedKmh) * 60;
             const estimatedArrival = new Date(now.getTime() + travelTimeMinutes * 60 * 1000);
-            
-            const finalEta = estimatedArrival <= scheduledDate ? estimatedArrival : scheduledDate;
-            eta = finalEta.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            eta = estimatedArrival.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
           } else {
+            // No distance available, show scheduled time
             eta = scheduledDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
           }
         }
