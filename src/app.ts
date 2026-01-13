@@ -22,6 +22,7 @@ import gradingRoutes from './routes/grading.routes';
 import notificationRoutes from './routes/notification.routes';
 import organisationProfileRoutes from './routes/organisation-profile.routes';
 import documentRoutes from './routes/document.routes';
+import siteRoutes from './routes/site.routes';
 
 const app: Express = express();
 
@@ -187,6 +188,7 @@ app.use('/api/grading', gradingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/organisation-profile', organisationProfileRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/sites', siteRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);
