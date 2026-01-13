@@ -2,6 +2,7 @@
 import { NotFoundError, ValidationError } from '../utils/errors';
 import prisma from '../config/database';
 import { BookingRepository } from '../repositories/booking.repository';
+import { logger } from '../utils/logger';
 
 const bookingRepo = new BookingRepository();
 
@@ -19,10 +20,10 @@ export interface GradingRecordData {
 }
 
 const gradeConditionFactors: Record<string, number> = {
-  'A': 1.05,     // 105% of Grade B baseline
-  'B': 1.0,      // Baseline (100%)
-  'C': 0.70,     // 70% of Grade B baseline
-  'D': 0.25,     // 25% of Grade B baseline
+  'A': 1.10,     // +10% above Grade B baseline
+  'B': 1.0,      // Baseline (100% - static buyback floor price)
+  'C': 0.75,     // -25% below Grade B baseline
+  'D': 0,        // Zero value
   'Recycled': 0, // No resale value
 };
 
@@ -248,28 +249,16 @@ export class GradingService {
 
   /**
    * Calculate resale value for a category and grade
-   * Uses buyback calculator logic with grade-based condition factor
+   * Simple formula: buybackFloor × gradeFactor × quantity
+   * 
+   * Grade adjustments:
+   * - Grade A: +10% (1.10 × buybackFloor)
+   * - Grade B: static buyback floor price (1.0 × buybackFloor)
+   * - Grade C: -25% (0.75 × buybackFloor)
+   * - Grade D: zero (0 × buybackFloor)
+   * - Recycled: zero (0 × buybackFloor)
    */
   async calculateResaleValue(category: string, grade: 'A' | 'B' | 'C' | 'D' | 'Recycled', quantity: number): Promise<number> {
-    // Get buyback config for factors
-    const config = await prisma.buybackConfig.findUnique({
-      where: { id: 'singleton' },
-    });
-    
-    const volumeFactor10 = config?.volumeFactor10 ?? 1.03;
-    const volumeFactor50 = config?.volumeFactor50 ?? 1.06;
-    const volumeFactor200 = config?.volumeFactor200 ?? 1.10;
-    const ageFactor = config?.ageFactor ?? 1.0; // Fixed at 3 years
-    const marketFactor = config?.marketFactor ?? 1.0;
-    
-    // Get volume factor based on quantity
-    const getVolumeFactor = (qty: number): number => {
-      if (qty >= 200) return volumeFactor200;
-      if (qty >= 50) return volumeFactor50;
-      if (qty >= 10) return volumeFactor10;
-      return 1.00; // 1-9 items
-    };
-    
     // Find category in database (case-insensitive)
     const categoryRecord = await prisma.assetCategory.findFirst({
       where: {
@@ -281,52 +270,23 @@ export class GradingService {
     });
     
     if (!categoryRecord) {
-      const categoryLower = category.toLowerCase().trim();
-      let baseBuyback = baseResaleValues[categoryLower] || 0;
-      
-      if (baseBuyback === 0) {
-        for (const [key, value] of Object.entries(baseResaleValues)) {
-          const keyLower = key.toLowerCase();
-          if (categoryLower.includes(keyLower) || keyLower.includes(categoryLower)) {
-            baseBuyback = value;
-            break;
-          }
-        }
-      }
-      
-      if (baseBuyback === 0) {
-        return 0; // Category not found and no fallback
-      }
-      
-      const conditionFactor = gradeConditionFactors[grade] || 0;
-      const volumeFactor = getVolumeFactor(quantity);
-      const resaleValuePerUnit = baseBuyback * ageFactor * conditionFactor * volumeFactor * marketFactor;
-      return Math.round(resaleValuePerUnit * quantity * 100) / 100;
+      logger.warn(`Category not found for resale value calculation: ${category}`);
+      return 0;
     }
     
-    // Calculate base buyback using RRP × residualLow (same as buyback calculator)
-    let baseBuyback: number;
+    // Get buybackFloor from database
+    const buybackFloor = categoryRecord.buybackFloor;
     
-    if (categoryRecord.avgRRP != null && categoryRecord.residualLow != null) {
-      // Use new database fields (RRP × residual_low %)
-      baseBuyback = categoryRecord.avgRRP * categoryRecord.residualLow;
-    } else if (categoryRecord.avgBuybackValue != null && categoryRecord.avgBuybackValue > 0) {
-      // Fallback to avgBuybackValue (already includes RRP × residual %)
-      baseBuyback = categoryRecord.avgBuybackValue;
-    } else {
-      return 0; // No buyback values available
+    if (buybackFloor === null || buybackFloor === undefined) {
+      logger.warn(`No buybackFloor defined for category: ${categoryRecord.name}`);
+      return 0;
     }
     
-    // Get grade-based condition factor
-    const conditionFactor = gradeConditionFactors[grade] || 0;
+    // Get grade-based factor
+    const gradeFactor = gradeConditionFactors[grade] ?? 0;
     
-    const volumeFactor = getVolumeFactor(quantity);
-    const rawResaleValuePerUnit = baseBuyback * ageFactor * conditionFactor * volumeFactor * marketFactor;
-    
-    const floor = categoryRecord.buybackFloor ?? 0;
-    const cap = categoryRecord.buybackCap ?? Infinity;
-    
-    const resaleValuePerUnit = Math.max(floor, Math.min(cap, rawResaleValuePerUnit));
+    // Simple calculation: buybackFloor × gradeFactor × quantity
+    const resaleValuePerUnit = buybackFloor * gradeFactor;
     const totalResaleValue = Math.round(resaleValuePerUnit * quantity * 100) / 100;
     
     return totalResaleValue;

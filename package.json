@@ -15,7 +15,8 @@
     "db:cleanup": "tsx cleanup-database.ts",
     "db:check-buyback": "tsx check-buyback-values.ts",
     "db:update-co2": "tsx update-co2-values.ts",
-    "db:populate-buyback": "tsx populate-buyback-values.ts"
+    "db:populate-buyback": "tsx populate-buyback-values.ts",
+    "db:update-buyback-floors": "tsx update-buyback-floors.ts"
   },
   "keywords": [
     "itad",

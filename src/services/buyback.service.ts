@@ -1,5 +1,6 @@
 // Buyback Calculation Service
-// Uses database values for buyback calculation
+// Simple buyback estimate: buybackFloor × quantity
+// For client-facing estimates with 3+ year assets, B/C grade only
 
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
@@ -7,7 +8,9 @@ import { logger } from '../utils/logger';
 export class BuybackService {
   /**
    * Calculate buyback estimate for assets
-   * Uses database values for RRP, residual percentages, volume factors, floors, and caps
+   * Simple formula: buybackFloor × quantity
+   * 
+   * Note: Final buyback will be updated after processing/testing
    */
   async calculateBuybackEstimate(data: {
     assets: Array<{ categoryId: string; quantity: number }>;
@@ -22,31 +25,6 @@ export class BuybackService {
         throw new Error('No asset categories found');
       }
 
-      // Get buyback config (singleton)
-      const config = await prisma.buybackConfig.findUnique({
-        where: { id: 'singleton' },
-      });
-
-      if (!config) {
-        // Use defaults if config doesn't exist
-        logger.warn('BuybackConfig not found, using default values');
-      }
-
-      const volumeFactor10 = config?.volumeFactor10 ?? 1.03;
-      const volumeFactor50 = config?.volumeFactor50 ?? 1.06;
-      const volumeFactor200 = config?.volumeFactor200 ?? 1.10;
-      const ageFactor = config?.ageFactor ?? 1.0;
-      const conditionFactor = config?.conditionFactor ?? 1.0;
-      const marketFactor = config?.marketFactor ?? 1.0;
-
-      // Calculate volume factor based on quantity
-      const getVolumeFactor = (quantity: number): number => {
-        if (quantity >= 200) return volumeFactor200;
-        if (quantity >= 50) return volumeFactor50;
-        if (quantity >= 10) return volumeFactor10;
-        return 1.00; // 1-9 items
-      };
-
       // Calculate total buyback
       let totalBuyback = 0;
 
@@ -58,35 +36,17 @@ export class BuybackService {
           continue;
         }
 
-        // Use database values, with fallback to avgBuybackValue if new fields are null
-        let baseBuyback: number;
-        
-        if (category.avgRRP != null && category.residualLow != null) {
-          // Use new database fields
-          baseBuyback = category.avgRRP * category.residualLow;
-        } else if (category.avgBuybackValue != null && category.avgBuybackValue > 0) {
-          // Fallback to avgBuybackValue (base value)
-          baseBuyback = category.avgBuybackValue;
-        } else {
-          logger.warn(`No buyback values found for category: ${category.name}`);
+        // Get buybackFloor from database
+        const buybackFloor = category.buybackFloor;
+
+        if (buybackFloor === null || buybackFloor === undefined) {
+          logger.warn(`No buybackFloor defined for category: ${category.name}`);
           continue;
         }
 
-        // Get volume factor for this quantity
-        const volumeFactor = getVolumeFactor(asset.quantity);
-
-        // Calculate buyback per unit
-        // Formula: (RRP × residual_low %) × volume_factor × age_factor × condition_factor × market_factor
-        const rawBuybackPerUnit = baseBuyback * ageFactor * conditionFactor * volumeFactor * marketFactor;
-
-        // Apply floor and cap from database
-        const floor = category.buybackFloor ?? 0;
-        const cap = category.buybackCap ?? Infinity;
-
-        const buybackPerUnit = Math.max(floor, Math.min(cap, rawBuybackPerUnit));
-
-        // Add to total (per unit × quantity)
-        totalBuyback += buybackPerUnit * asset.quantity;
+        // Simple calculation: buybackFloor × quantity
+        const buybackForAsset = buybackFloor * asset.quantity;
+        totalBuyback += buybackForAsset;
       }
 
       return Math.round(totalBuyback * 100) / 100; // Round to 2 decimal places
