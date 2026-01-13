@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 // Script to update buybackFloor values in database
 // Simple buyback estimate: buybackFloor × quantity
 
