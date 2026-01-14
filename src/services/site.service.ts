@@ -328,16 +328,7 @@ export class SiteService {
       // Verify site exists and user has access
       await this.getSiteById(siteId, userId, tenantId, userRole);
 
-      // Check if site has any bookings
-      const bookingsCount = await prisma.booking.count({
-        where: { siteId },
-      });
-
-      if (bookingsCount > 0) {
-        throw new ValidationError('Cannot delete site with existing bookings');
-      }
-
-      // Delete site
+      // Delete site (bookings will have their siteId set to null automatically via schema)
       await prisma.site.delete({
         where: { id: siteId },
       });
