@@ -18,7 +18,7 @@ const categoryData: Record<string, {
     avgBuybackValue: 300, // RRP × residualLow = 2000 × 0.15
     avgRRP: 2000,
     residualLow: 0.15,
-    buybackFloor: 30,
+    buybackFloor: 25,
     buybackCap: 2000,
   },
   'Laptop': {
@@ -27,7 +27,7 @@ const categoryData: Record<string, {
     avgBuybackValue: 180, // RRP × residualLow = 1000 × 0.18
     avgRRP: 1000,
     residualLow: 0.18,
-    buybackFloor: 30,
+    buybackFloor: 35,
     buybackCap: 600,
   },
   'Server': {
@@ -36,7 +36,7 @@ const categoryData: Record<string, {
     avgBuybackValue: 400, // RRP × residualLow = 5000 × 0.08
     avgRRP: 5000,
     residualLow: 0.08,
-    buybackFloor: 50,
+    buybackFloor: 60,
     buybackCap: 2500,
   },
   'Smart Phones': {
@@ -45,7 +45,7 @@ const categoryData: Record<string, {
     avgBuybackValue: 119, // RRP × residualLow = 700 × 0.17
     avgRRP: 700,
     residualLow: 0.17,
-    buybackFloor: 10,
+    buybackFloor: 30,
     buybackCap: 450,
   },
   'Desktop': {
@@ -54,7 +54,7 @@ const categoryData: Record<string, {
     avgBuybackValue: 81, // RRP × residualLow = 900 × 0.09
     avgRRP: 900,
     residualLow: 0.09,
-    buybackFloor: 10,
+    buybackFloor: 15,
     buybackCap: 250,
   },
   'Storage': {
