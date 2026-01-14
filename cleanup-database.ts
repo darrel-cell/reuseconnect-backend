@@ -157,57 +157,85 @@ async function cleanupDatabase() {
     console.log(`      Password: ${adminPassword}`);
     console.log(`      Name: ${admin.name}\n`);
 
-    // Step 14: Create 7 asset categories
+    // Step 14: Create 7 asset categories with complete buyback data
     console.log('📦 Creating asset categories...');
     const categories = [
       {
         name: 'Networking',
         icon: '📡',
-        co2ePerUnit: 100,
-        avgWeight: 1.0,
-        avgBuybackValue: 45,
-      },
-      {
-        name: 'Server',
-        icon: '🖥️',
         co2ePerUnit: 500,
-        avgWeight: 20.0,
-        avgBuybackValue: 300,
-      },
-      {
-        name: 'Storage',
-        icon: '💾',
-        co2ePerUnit: 200,
-        avgWeight: 2.0,
-        avgBuybackValue: 100,
+        avgWeight: 1.0,
+        avgBuybackValue: 300, // RRP × residualLow = 2000 × 0.15
+        avgRRP: 2000,
+        residualLow: 0.15,
+        buybackFloor: 30,
+        buybackCap: 2000,
       },
       {
         name: 'Laptop',
         icon: '💻',
         co2ePerUnit: 250,
         avgWeight: 2.5,
-        avgBuybackValue: 150,
+        avgBuybackValue: 180, // RRP × residualLow = 1000 × 0.18
+        avgRRP: 1000,
+        residualLow: 0.18,
+        buybackFloor: 30,
+        buybackCap: 600,
       },
       {
-        name: 'Desktop',
+        name: 'Server',
         icon: '🖥️',
-        co2ePerUnit: 300,
-        avgWeight: 8.0,
-        avgBuybackValue: 80,
+        co2ePerUnit: 1200,
+        avgWeight: 20.0,
+        avgBuybackValue: 400, // RRP × residualLow = 5000 × 0.08
+        avgRRP: 5000,
+        residualLow: 0.08,
+        buybackFloor: 50,
+        buybackCap: 2500,
       },
       {
         name: 'Smart Phones',
         icon: '📱',
-        co2ePerUnit: 60,
+        co2ePerUnit: 70,
         avgWeight: 0.2,
-        avgBuybackValue: 30,
+        avgBuybackValue: 119, // RRP × residualLow = 700 × 0.17
+        avgRRP: 700,
+        residualLow: 0.17,
+        buybackFloor: 10,
+        buybackCap: 450,
+      },
+      {
+        name: 'Desktop',
+        icon: '🖥️',
+        co2ePerUnit: 350,
+        avgWeight: 8.0,
+        avgBuybackValue: 81, // RRP × residualLow = 900 × 0.09
+        avgRRP: 900,
+        residualLow: 0.09,
+        buybackFloor: 10,
+        buybackCap: 250,
+      },
+      {
+        name: 'Storage',
+        icon: '💾',
+        co2ePerUnit: 800,
+        avgWeight: 2.0,
+        avgBuybackValue: 300, // RRP × residualLow = 6000 × 0.05
+        avgRRP: 6000,
+        residualLow: 0.05,
+        buybackFloor: 50,
+        buybackCap: 3000,
       },
       {
         name: 'Tablets',
         icon: '📱',
-        co2ePerUnit: 80,
+        co2ePerUnit: 90,
         avgWeight: 0.5,
-        avgBuybackValue: 50,
+        avgBuybackValue: 102, // RRP × residualLow = 600 × 0.17
+        avgRRP: 600,
+        residualLow: 0.17,
+        buybackFloor: 15,
+        buybackCap: 400,
       },
     ];
 
