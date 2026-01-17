@@ -54,7 +54,8 @@ const envSchema = z.object({
   OPENROUTESERVICE_API_KEY: z.string().optional(), // OpenRouteService API key (optional, falls back to OSRM if not provided)
   
   // AWS S3 Storage (optional - for file storage)
-  USE_S3_STORAGE: z.string().default('false').transform(val => val === 'true'),
+  // If not explicitly set, automatically uses S3 in production, local storage in development
+  USE_S3_STORAGE: z.string().optional(),
   AWS_REGION: z.string().optional(),
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
@@ -128,7 +129,11 @@ export const validatedConfig = {
     openRouteServiceApiKey: env.OPENROUTESERVICE_API_KEY,
   },
   s3: {
-    useS3: env.USE_S3_STORAGE,
+    // Auto-detect: Use S3 in production, local storage in development
+    // Can be overridden by explicitly setting USE_S3_STORAGE=true or false
+    useS3: env.USE_S3_STORAGE 
+      ? env.USE_S3_STORAGE === 'true' 
+      : env.NODE_ENV === 'production', // Auto-enable S3 in production if not explicitly set
     region: env.AWS_REGION || 'eu-west-2',
     accessKeyId: env.AWS_ACCESS_KEY_ID || '',
     secretAccessKey: env.AWS_SECRET_ACCESS_KEY || '',

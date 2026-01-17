@@ -5,7 +5,7 @@ import { NotFoundError } from '../utils/errors';
 import path from 'path';
 import fs from 'fs';
 import prisma from '../config/database';
-import { uploadToS3, isS3Enabled, getPresignedUrl, extractS3KeyFromUrl } from '../utils/s3-storage';
+import { uploadToS3, isS3Enabled, getPresignedUrl } from '../utils/s3-storage';
 
 const documentRepo = new DocumentRepository();
 
@@ -125,9 +125,11 @@ export class DocumentService {
         try {
           fs.unlinkSync(filePath);
         } catch (unlinkError) {
+          const { logger } = await import('../utils/logger');
           logger.warn('Failed to delete temporary PDF file after S3 upload', { error: unlinkError, filePath });
         }
       } catch (s3Error) {
+        const { logger } = await import('../utils/logger');
         logger.error('Failed to upload PDF to S3, falling back to local storage', {
           error: s3Error,
           jobId,
@@ -185,6 +187,7 @@ export class DocumentService {
         const presignedUrl = await getPresignedUrl(document.filePath, 3600); // 1 hour expiry
         return presignedUrl;
       } catch (error) {
+        const { logger } = await import('../utils/logger');
         logger.error('Failed to generate presigned URL for document', { error, documentId, filePath: document.filePath });
         return document.filePath; // Fallback to original path
       }
