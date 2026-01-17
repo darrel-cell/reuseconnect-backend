@@ -380,6 +380,8 @@ export async function notifyGradedForApproval(
 /**
  * Create notification for pending user approval (admin)
  * Notifies admins when a client/reseller signs up without invitation and needs approval
+ * - Clients are routed to /clients page
+ * - Resellers are routed to /users page
  */
 export async function notifyPendingUserApproval(
   userId: string,
@@ -391,13 +393,18 @@ export async function notifyPendingUserApproval(
 ) {
   const roleLabel = userRole === 'client' ? 'Client' : userRole === 'reseller' ? 'Reseller' : userRole;
   
+  // Route clients to /clients page, resellers to /users page
+  const notificationUrl = userRole === 'client' 
+    ? '/clients?status=pending'
+    : '/users?status=pending&role=reseller';
+  
   await createNotificationsForUsers(
     adminUserIds,
     tenantId,
     'warning',
     'New user pending approval',
     `${roleLabel} ${userName} (${userEmail}) has signed up and is waiting for approval`,
-    `/users?status=pending`,
+    notificationUrl,
     userId,
     'user'
   );
