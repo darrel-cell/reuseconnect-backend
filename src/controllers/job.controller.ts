@@ -143,26 +143,38 @@ export class JobController {
       }
 
       // Validate file uploads
+      // Allow both base64 data URLs (new uploads) and S3 URLs/keys (already uploaded)
       if (photos && Array.isArray(photos) && photos.length > 0) {
-        try {
-          validateBase64Images(photos, 'photos', 10);
-        } catch (error) {
-          return res.status(400).json({
-            success: false,
-            error: error instanceof Error ? error.message : 'Invalid photo data',
-          } as ApiResponse);
+        // Filter out empty strings and validate only base64 images (skip S3 URLs)
+        const base64Photos = photos.filter((photo: string) => 
+          photo && typeof photo === 'string' && photo.trim().length > 0 && photo.startsWith('data:')
+        );
+        
+        if (base64Photos.length > 0) {
+          try {
+            validateBase64Images(base64Photos, 'photos', 10);
+          } catch (error) {
+            return res.status(400).json({
+              success: false,
+              error: error instanceof Error ? error.message : 'Invalid photo data',
+            } as ApiResponse);
+          }
         }
       }
 
       if (signature && typeof signature === 'string' && signature.trim().length > 0) {
-        try {
-          validateBase64Image(signature, 'signature');
-        } catch (error) {
-          return res.status(400).json({
-            success: false,
-            error: error instanceof Error ? error.message : 'Invalid signature data',
-          } as ApiResponse);
+        // Only validate if it's a base64 data URL (new upload), skip validation for S3 URLs
+        if (signature.startsWith('data:')) {
+          try {
+            validateBase64Image(signature, 'signature');
+          } catch (error) {
+            return res.status(400).json({
+              success: false,
+              error: error instanceof Error ? error.message : 'Invalid signature data',
+            } as ApiResponse);
+          }
         }
+        // If it's an S3 URL/key, allow it without validation
       }
 
       logger.debug('Evidence submission', {
@@ -172,6 +184,12 @@ export class JobController {
         photosCount: Array.isArray(photos) ? photos.length : 0,
         hasSignature: !!signature,
         sealNumbersCount: Array.isArray(sealNumbers) ? sealNumbers.length : 0,
+        photoTypes: Array.isArray(photos) ? photos.map((p: any) => 
+          typeof p === 'string' ? (p.startsWith('data:') ? 'base64' : p.startsWith('http') || p.startsWith('evidence/') ? 'url' : 'unknown') : typeof p
+        ) : [],
+        signatureType: signature && typeof signature === 'string' ? 
+          (signature.startsWith('data:') ? 'base64' : signature.startsWith('http') || signature.startsWith('evidence/') ? 'url' : 'unknown') : 
+          typeof signature,
       });
 
       const job = await jobService.updateEvidence(id, {
