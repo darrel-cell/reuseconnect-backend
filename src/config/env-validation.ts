@@ -131,9 +131,29 @@ export const validatedConfig = {
   s3: {
     // Auto-detect: Use S3 in production, local storage in development
     // Can be overridden by explicitly setting USE_S3_STORAGE=true or false
-    useS3: env.USE_S3_STORAGE 
-      ? env.USE_S3_STORAGE === 'true' 
-      : env.NODE_ENV === 'production', // Auto-enable S3 in production if not explicitly set
+    // Only enable S3 if credentials are provided
+    useS3: (() => {
+      const hasCredentials = !!(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.AWS_S3_BUCKET_NAME);
+      
+      // If USE_S3_STORAGE is explicitly set, use that value (but still check credentials)
+      if (env.USE_S3_STORAGE) {
+        if (env.USE_S3_STORAGE === 'true' && !hasCredentials) {
+          console.warn('⚠️  WARNING: USE_S3_STORAGE=true but AWS credentials are missing. S3 will not work.');
+        }
+        return env.USE_S3_STORAGE === 'true';
+      }
+      
+      // Otherwise, auto-enable S3 in production only if credentials are provided
+      if (env.NODE_ENV === 'production') {
+        if (!hasCredentials) {
+          console.warn('⚠️  WARNING: NODE_ENV=production but AWS credentials are missing. S3 will not be enabled.');
+        }
+        return hasCredentials;
+      }
+      
+      // In development, default to false unless explicitly enabled
+      return false;
+    })(),
     region: env.AWS_REGION || 'eu-west-2',
     accessKeyId: env.AWS_ACCESS_KEY_ID || '',
     secretAccessKey: env.AWS_SECRET_ACCESS_KEY || '',

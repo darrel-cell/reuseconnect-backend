@@ -8,13 +8,26 @@ import { logger } from './logger';
 let s3Client: S3Client | null = null;
 
 if (validatedConfig.s3.useS3) {
-  s3Client = new S3Client({
-    region: validatedConfig.s3.region,
-    credentials: {
-      accessKeyId: validatedConfig.s3.accessKeyId,
-      secretAccessKey: validatedConfig.s3.secretAccessKey,
-    },
-  });
+  // Validate that credentials are provided
+  if (!validatedConfig.s3.accessKeyId || !validatedConfig.s3.secretAccessKey || !validatedConfig.s3.bucketName) {
+    logger.warn('S3 storage is enabled but credentials are missing. S3 uploads will fail.', {
+      hasAccessKey: !!validatedConfig.s3.accessKeyId,
+      hasSecretKey: !!validatedConfig.s3.secretAccessKey,
+      hasBucketName: !!validatedConfig.s3.bucketName,
+    });
+  } else {
+    s3Client = new S3Client({
+      region: validatedConfig.s3.region,
+      credentials: {
+        accessKeyId: validatedConfig.s3.accessKeyId,
+        secretAccessKey: validatedConfig.s3.secretAccessKey,
+      },
+    });
+    logger.info('S3 client initialized successfully', {
+      region: validatedConfig.s3.region,
+      bucketName: validatedConfig.s3.bucketName,
+    });
+  }
 }
 
 export interface UploadFileOptions {
