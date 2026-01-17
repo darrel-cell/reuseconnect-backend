@@ -5,6 +5,7 @@ import { NotFoundError } from '../utils/errors';
 import path from 'path';
 import fs from 'fs';
 import prisma from '../config/database';
+import { uploadToS3, isS3Enabled, getPresignedUrl, extractS3KeyFromUrl } from '../utils/s3-storage';
 
 const documentRepo = new DocumentRepository();
 
@@ -77,7 +78,7 @@ export class DocumentService {
     
     const chainOfCustodyData = await prepareChainOfCustodyData(job);
 
-    // Generate PDF
+    // Generate PDF to temporary location
     const documentsDir = path.join(process.cwd(), 'uploads', 'documents');
     if (!fs.existsSync(documentsDir)) {
       fs.mkdirSync(documentsDir, { recursive: true });
@@ -102,6 +103,43 @@ export class DocumentService {
       throw new Error('Generated Chain of Custody PDF is empty. Generation aborted.');
     }
 
+    // Upload to S3 if enabled, otherwise keep local file path
+    let filePathToStore: string;
+    if (isS3Enabled()) {
+      try {
+        // Read PDF file
+        const pdfBuffer = fs.readFileSync(filePath);
+        
+        // Upload to S3
+        const uploadResult = await uploadToS3({
+          file: pdfBuffer,
+          fileName: fileName,
+          folder: 'documents',
+          contentType: 'application/pdf',
+          isBase64: false,
+        });
+        
+        filePathToStore = uploadResult.url;
+        
+        // Clean up local temporary file after successful S3 upload
+        try {
+          fs.unlinkSync(filePath);
+        } catch (unlinkError) {
+          logger.warn('Failed to delete temporary PDF file after S3 upload', { error: unlinkError, filePath });
+        }
+      } catch (s3Error) {
+        logger.error('Failed to upload PDF to S3, falling back to local storage', {
+          error: s3Error,
+          jobId,
+        });
+        // Fallback to local storage
+        filePathToStore = `/uploads/documents/${fileName}`;
+      }
+    } else {
+      // Local storage
+      filePathToStore = `/uploads/documents/${fileName}`;
+    }
+
     // Save document record to database
     const document = await documentRepo.create({
       tenantId: job.tenantId,
@@ -109,7 +147,7 @@ export class DocumentService {
       bookingId: job.bookingId || undefined,
       name: `Chain of Custody - ${job.erpJobNumber || jobId}`,
       type: 'chain-of-custody',
-      filePath: `/uploads/documents/${fileName}`, // Relative path for serving
+      filePath: filePathToStore, // S3 URL or local path
       fileSize,
       mimeType: 'application/pdf',
       uploadedBy: generatedBy,
@@ -126,6 +164,7 @@ export class DocumentService {
 
   /**
    * Get document file path for serving
+   * Returns local file path or S3 URL/presigned URL
    */
   async getDocumentPath(documentId: string): Promise<string | null> {
     const document = await documentRepo.findById(documentId);
@@ -133,7 +172,25 @@ export class DocumentService {
       return null;
     }
 
-    // Return absolute path for file system access
+    // Check if it's an S3 URL
+    if (isS3Enabled() && (document.filePath.startsWith('http://') || document.filePath.startsWith('https://'))) {
+      // It's already a public S3 URL, return as is
+      return document.filePath;
+    }
+
+    // Check if it's an S3 key (path without http/https)
+    if (isS3Enabled() && (document.filePath.startsWith('evidence/') || document.filePath.startsWith('documents/'))) {
+      // Generate presigned URL for private S3 objects
+      try {
+        const presignedUrl = await getPresignedUrl(document.filePath, 3600); // 1 hour expiry
+        return presignedUrl;
+      } catch (error) {
+        logger.error('Failed to generate presigned URL for document', { error, documentId, filePath: document.filePath });
+        return document.filePath; // Fallback to original path
+      }
+    }
+
+    // Local file path - return absolute path
     return path.join(process.cwd(), document.filePath);
   }
 

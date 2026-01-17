@@ -52,6 +52,14 @@ const envSchema = z.object({
   
   // Routing API (optional - for road distance calculations)
   OPENROUTESERVICE_API_KEY: z.string().optional(), // OpenRouteService API key (optional, falls back to OSRM if not provided)
+  
+  // AWS S3 Storage (optional - for file storage)
+  USE_S3_STORAGE: z.string().default('false').transform(val => val === 'true'),
+  AWS_REGION: z.string().optional(),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  AWS_S3_BUCKET_NAME: z.string().optional(),
+  AWS_S3_BASE_URL: z.string().url().optional(),
 });
 
 // Validate environment variables
@@ -118,6 +126,14 @@ export const validatedConfig = {
   },
   routing: {
     openRouteServiceApiKey: env.OPENROUTESERVICE_API_KEY,
+  },
+  s3: {
+    useS3: env.USE_S3_STORAGE,
+    region: env.AWS_REGION || 'eu-west-2',
+    accessKeyId: env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: env.AWS_SECRET_ACCESS_KEY || '',
+    bucketName: env.AWS_S3_BUCKET_NAME || '',
+    baseUrl: env.AWS_S3_BASE_URL,
   },
 };
 

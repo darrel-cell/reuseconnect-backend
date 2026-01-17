@@ -1052,14 +1052,71 @@ export class JobService {
       throw new ValidationError('Evidence must include at least one photo or a customer signature. Cannot create empty evidence records.');
     }
 
+    // Upload photos and signature to S3 if enabled, otherwise keep as base64
+    let uploadedPhotos: string[] = photos;
+    let uploadedSignature: string | null = signature;
+
+    const { uploadToS3, isS3Enabled } = await import('../utils/s3-storage');
+    if (isS3Enabled()) {
+      try {
+        // Upload photos to S3
+        if (photos.length > 0) {
+          const photoUploads = await Promise.all(
+            photos.map(async (photo, index) => {
+              // Extract MIME type from base64 data URL
+              const mimeMatch = photo.match(/data:([^;]+);base64,/);
+              const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+              const ext = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+              
+              const uploadResult = await uploadToS3({
+                file: photo,
+                fileName: `${job.id}-photo-${index + 1}.${ext}`,
+                folder: 'evidence/photos',
+                contentType: mimeType,
+                isBase64: true,
+              });
+              
+              return uploadResult.url;
+            })
+          );
+          uploadedPhotos = photoUploads;
+        }
+
+        // Upload signature to S3
+        if (signature) {
+          const mimeMatch = signature.match(/data:([^;]+);base64,/);
+          const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+          const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+          
+          const signatureUpload = await uploadToS3({
+            file: signature,
+            fileName: `${job.id}-signature.${ext}`,
+            folder: 'evidence/signatures',
+            contentType: mimeType,
+            isBase64: true,
+          });
+          
+          uploadedSignature = signatureUpload.url;
+        }
+      } catch (error) {
+        logger.error('Failed to upload evidence to S3, falling back to base64 storage', {
+          error,
+          jobId: job.id,
+        });
+        // Fallback to base64 storage if S3 upload fails
+        uploadedPhotos = photos;
+        uploadedSignature = signature;
+      }
+    }
+
     // Create new evidence for this status (using cleaned/validated data)
     const createdEvidence = await prisma.evidence.create({
       data: {
         jobId: job.id,
         status: data.status,
         uploadedBy: data.uploadedBy,
-        photos: photos,
-        signature: signature,
+        photos: uploadedPhotos,
+        signature: uploadedSignature,
         sealNumbers: sealNumbers,
         notes: notes,
       },

@@ -58,6 +58,7 @@ export class DocumentController {
 
   /**
    * Download a document
+   * Handles both local files and S3 URLs (presigned URLs)
    */
   async downloadDocument(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
@@ -71,7 +72,21 @@ export class DocumentController {
       const { id } = req.params;
       const filePath = await documentService.getDocumentPath(id);
 
-      if (!filePath || !fs.existsSync(filePath)) {
+      if (!filePath) {
+        return res.status(404).json({
+          success: false,
+          error: 'Document not found',
+        } as ApiResponse);
+      }
+
+      // Check if it's an S3 URL (http/https) - redirect to presigned URL
+      if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+        // It's already a presigned URL or public S3 URL, redirect
+        return res.redirect(filePath);
+      }
+
+      // Local file - check if exists and stream
+      if (!fs.existsSync(filePath)) {
         return res.status(404).json({
           success: false,
           error: 'Document not found',
