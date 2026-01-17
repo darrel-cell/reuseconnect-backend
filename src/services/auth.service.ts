@@ -127,6 +127,49 @@ export class AuthService {
       tenantId: tenant.id,
     });
 
+    // If user is created with pending status, notify all admin users
+    if (userStatus === 'pending') {
+      try {
+        // Get all admin users (admins are global across tenants)
+        const adminUsers = await prisma.user.findMany({
+          where: {
+            role: 'admin',
+            status: 'active',
+          },
+          select: { id: true },
+        });
+
+        if (adminUsers.length > 0) {
+          const { notifyPendingUserApproval } = await import('../utils/notifications');
+          const { logger } = await import('../utils/logger');
+          
+          logger.info('Notifying admins of pending user approval', {
+            userId: user.id,
+            email: user.email,
+            role: userRole,
+            adminCount: adminUsers.length,
+          });
+
+          // Notify all admins about pending user approval
+          await notifyPendingUserApproval(
+            user.id,
+            user.email,
+            user.name,
+            userRole,
+            adminUsers.map(a => a.id),
+            tenant.id
+          );
+        }
+      } catch (error) {
+        // Log error but don't fail signup if notification fails
+        const { logger } = await import('../utils/logger');
+        logger.error('Failed to notify admins of pending user signup', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          userId: user.id,
+        });
+      }
+    }
+
     // If role is 'client', create a Client record with the organisationName from companyName
     if (userRole === 'client') {
       await prisma.client.create({
