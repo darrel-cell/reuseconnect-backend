@@ -86,24 +86,49 @@ router.get(
         prisma.client.count({ where }),
       ]);
 
+      // Fetch user status for each client (linked by email)
+      const clientEmails = clients.map(c => c.email).filter((email): email is string => !!email);
+      const users = await prisma.user.findMany({
+        where: {
+          email: { in: clientEmails },
+          role: 'client',
+        },
+        select: {
+          email: true,
+          status: true,
+          id: true,
+        },
+      });
+
+      // Create a map of email to user status
+      const userStatusMap = new Map(users.map(u => [u.email, { status: u.status, userId: u.id }]));
+
       // Transform clients to match frontend interface
-      const transformedClients = clients.map(client => ({
-        id: client.id,
-        name: client.name,
-        organisationName: client.organisationName || undefined,
-        tenantId: client.tenantId,
-        tenantName: client.tenant?.name || '',
-        email: client.email || '',
-        contactName: client.name, // Use name as contact name
-        contactPhone: client.phone || '',
-        resellerId: client.resellerId,
-        resellerName: client.resellerName,
-        status: client.status,
-        createdAt: client.createdAt.toISOString(),
-        totalBookings: client._count.bookings,
-        totalJobs: 0, // TODO: Calculate from jobs linked to bookings
-        totalValue: 0, // TODO: Calculate from bookings/jobs
-      }));
+      const transformedClients = clients.map(client => {
+        const userInfo = client.email ? userStatusMap.get(client.email) : null;
+        // User status takes precedence - if user is pending, show pending even if client.status is active
+        const displayStatus = userInfo?.status === 'pending' ? 'pending' : client.status;
+        
+        return {
+          id: client.id,
+          name: client.name,
+          organisationName: client.organisationName || undefined,
+          tenantId: client.tenantId,
+          tenantName: client.tenant?.name || '',
+          email: client.email || '',
+          contactName: client.name, // Use name as contact name
+          contactPhone: client.phone || '',
+          resellerId: client.resellerId,
+          resellerName: client.resellerName,
+          status: displayStatus, // Use user status if pending, otherwise client status
+          userStatus: userInfo?.status, // Include user status separately for reference
+          userId: userInfo?.userId, // Include userId for approval
+          createdAt: client.createdAt.toISOString(),
+          totalBookings: client._count.bookings,
+          totalJobs: 0, // TODO: Calculate from jobs linked to bookings
+          totalValue: 0, // TODO: Calculate from bookings/jobs
+        };
+      });
 
       return res.json({
         success: true,
