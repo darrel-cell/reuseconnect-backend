@@ -397,7 +397,7 @@ export async function notifyPendingUserApproval(
     'warning',
     'New user pending approval',
     `${roleLabel} ${userName} (${userEmail}) has signed up and is waiting for approval`,
-    `/admin/users/${userId}`,
+    `/users?status=pending`,
     userId,
     'user'
   );

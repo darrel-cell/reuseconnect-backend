@@ -111,10 +111,9 @@ export class AuthService {
     // Hash password
     const hashedPassword = await hashPassword(data.password);
 
-    // Create user with pending status (or active in development)
-    // In production, users start as 'pending' and require admin approval
-    // In development, auto-activate for easier testing
-    const userStatus = process.env.NODE_ENV === 'production' ? 'pending' : 'active';
+    // Create user with pending status - requires admin approval
+    // Users start as 'pending' and require admin approval in all environments
+    const userStatus = 'pending';
     
     const userRole = (data.role || 'client') as UserRole;
 
@@ -127,9 +126,8 @@ export class AuthService {
       tenantId: tenant.id,
     });
 
-    // If user is created with pending status, notify all admin users
-    if (userStatus === 'pending') {
-      try {
+    // Notify all admin users about pending user approval
+    try {
         // Get all admin users (admins are global across tenants)
         const adminUsers = await prisma.user.findMany({
           where: {
@@ -160,14 +158,13 @@ export class AuthService {
             tenant.id
           );
         }
-      } catch (error) {
-        // Log error but don't fail signup if notification fails
-        const { logger } = await import('../utils/logger');
-        logger.error('Failed to notify admins of pending user signup', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          userId: user.id,
-        });
-      }
+    } catch (error) {
+      // Log error but don't fail signup if notification fails
+      const { logger } = await import('../utils/logger');
+      logger.error('Failed to notify admins of pending user signup', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        userId: user.id,
+      });
     }
 
     // If role is 'client', create a Client record with the organisationName from companyName
