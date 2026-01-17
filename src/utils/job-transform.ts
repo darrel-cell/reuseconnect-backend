@@ -182,46 +182,6 @@ export function transformJobForAPI(job: any): TransformedJob {
     roadWorksPublicEvents: job.roadWorksPublicEvents ?? null,
     manualHandlingRequirements: job.manualHandlingRequirements ?? null,
     evidence: (() => {
-      // Helper function to convert S3 URLs/keys to presigned URLs if needed
-      const convertToPresignedUrl = async (urlOrKey: string): Promise<string> => {
-        if (!isS3Enabled()) {
-          // Not using S3, return as is (might be base64 or local file path)
-          return urlOrKey;
-        }
-        
-        // Check if it's already a valid HTTP/HTTPS URL (base64 data URL or external URL)
-        if (urlOrKey.startsWith('http://') || urlOrKey.startsWith('https://') || urlOrKey.startsWith('data:')) {
-          // If it's a base64 data URL or external URL, return as is
-          // If it's an S3 URL but private, we need to check
-          if (urlOrKey.startsWith('https://') && urlOrKey.includes('.s3.') && urlOrKey.includes('amazonaws.com')) {
-            // Extract S3 key from full URL
-            const key = extractS3KeyFromUrl(urlOrKey);
-            if (key) {
-              try {
-                return await getPresignedUrl(key, 3600); // 1 hour expiry
-              } catch (error) {
-                // If presigned URL generation fails, return original URL
-                return urlOrKey;
-              }
-            }
-          }
-          return urlOrKey;
-        }
-        
-        // Check if it's an S3 key (starts with evidence/ or documents/)
-        if (urlOrKey.startsWith('evidence/') || urlOrKey.startsWith('documents/')) {
-          try {
-            return await getPresignedUrl(urlOrKey, 3600); // 1 hour expiry
-          } catch (error) {
-            // If presigned URL generation fails, return original key
-            return urlOrKey;
-          }
-        }
-        
-        // Not an S3 URL/key, return as is (might be base64)
-        return urlOrKey;
-      };
-      
       // Check if evidence exists and is an array
       if (!job.evidence) {
         return null;

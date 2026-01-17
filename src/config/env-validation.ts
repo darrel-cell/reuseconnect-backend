@@ -130,28 +130,35 @@ export const validatedConfig = {
   },
   s3: {
     // Auto-detect: Use S3 in production, local storage in development
-    // Can be overridden by explicitly setting USE_S3_STORAGE=true or false
+    // NODE_ENV takes precedence - USE_S3_STORAGE can only override if explicitly set
     // Only enable S3 if credentials are provided
     useS3: (() => {
       const hasCredentials = !!(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.AWS_S3_BUCKET_NAME);
       
-      // If USE_S3_STORAGE is explicitly set, use that value (but still check credentials)
-      if (env.USE_S3_STORAGE) {
-        if (env.USE_S3_STORAGE === 'true' && !hasCredentials) {
-          console.warn('⚠️  WARNING: USE_S3_STORAGE=true but AWS credentials are missing. S3 will not work.');
+      // In development, always use local storage unless USE_S3_STORAGE is explicitly set to 'true'
+      if (env.NODE_ENV === 'development') {
+        if (env.USE_S3_STORAGE === 'true') {
+          if (!hasCredentials) {
+            console.warn('⚠️  WARNING: USE_S3_STORAGE=true in development but AWS credentials are missing. S3 will not work.');
+          }
+          return true; // Explicitly enabled in dev
         }
-        return env.USE_S3_STORAGE === 'true';
+        return false; // Default to local storage in development
       }
       
-      // Otherwise, auto-enable S3 in production only if credentials are provided
+      // In production, use S3 if credentials are provided
+      // USE_S3_STORAGE=false can override to disable S3 even in production
       if (env.NODE_ENV === 'production') {
+        if (env.USE_S3_STORAGE === 'false') {
+          return false; // Explicitly disabled in production
+        }
         if (!hasCredentials) {
           console.warn('⚠️  WARNING: NODE_ENV=production but AWS credentials are missing. S3 will not be enabled.');
         }
-        return hasCredentials;
+        return hasCredentials; // Auto-enable S3 in production if credentials exist
       }
       
-      // In development, default to false unless explicitly enabled
+      // Default to local storage for other environments (test, etc.)
       return false;
     })(),
     region: env.AWS_REGION || 'eu-west-2',
