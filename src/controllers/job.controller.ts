@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { JobService } from '../services/job.service';
 import { AuthenticatedRequest, ApiResponse } from '../types';
-import { transformJobForAPI, transformJobsForAPI } from '../utils/job-transform';
+import { transformJobForAPI, transformJobsForAPI, processEvidenceUrls } from '../utils/job-transform';
 import { validateBase64Images, validateBase64Image } from '../utils/file-validation';
 import { logger } from '../utils/logger';
 
@@ -13,10 +13,12 @@ export class JobController {
       const { id } = req.params;
       const job = await jobService.getJobById(id);
       const transformedJob = transformJobForAPI(job as any);
+      // Process evidence URLs to generate presigned URLs for S3 objects
+      const jobWithPresignedUrls = await processEvidenceUrls(transformedJob);
       
       return res.json({
         success: true,
-        data: transformedJob,
+        data: jobWithPresignedUrls,
       } as ApiResponse);
     } catch (error) {
       return next(error);
@@ -102,9 +104,11 @@ export class JobController {
       );
 
       const transformedJob = transformJobForAPI(job as any);
+      // Process evidence URLs to generate presigned URLs for S3 objects
+      const jobWithPresignedUrls = await processEvidenceUrls(transformedJob);
       return res.json({
         success: true,
-        data: transformedJob,
+        data: jobWithPresignedUrls,
       } as ApiResponse);
     } catch (error) {
       return next(error);
@@ -180,9 +184,11 @@ export class JobController {
       });
 
       const transformedJob = transformJobForAPI(job as any);
+      // Process evidence URLs to generate presigned URLs for S3 objects
+      const jobWithPresignedUrls = await processEvidenceUrls(transformedJob);
       return res.json({
         success: true,
-        data: transformedJob,
+        data: jobWithPresignedUrls,
       } as ApiResponse);
     } catch (error) {
       return next(error);
@@ -222,9 +228,11 @@ export class JobController {
       });
 
       const transformedJob = transformJobForAPI(job as any);
+      // Process evidence URLs to generate presigned URLs for S3 objects
+      const jobWithPresignedUrls = await processEvidenceUrls(transformedJob);
       return res.json({
         success: true,
-        data: transformedJob,
+        data: jobWithPresignedUrls,
       } as ApiResponse);
     } catch (error) {
       return next(error);

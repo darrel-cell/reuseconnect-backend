@@ -187,15 +187,28 @@ export function isS3Enabled(): boolean {
  * Extract S3 key from URL
  */
 export function extractS3KeyFromUrl(url: string): string | null {
-  // If URL contains the bucket name and key pattern
-  const match = url.match(/\/evidence\/.+|\/documents\/.+/);
-  if (match) {
-    return match[0].replace(/^\//, ''); // Remove leading slash
-  }
-  
   // If it's already a key (just the path)
   if (url.startsWith('evidence/') || url.startsWith('documents/')) {
     return url;
+  }
+
+  // If URL is a full S3 URL (e.g., https://bucket.s3.region.amazonaws.com/evidence/photos/file.jpg)
+  // Extract the key part after the domain
+  try {
+    const urlObj = new URL(url);
+    // Remove leading slash from pathname
+    const key = urlObj.pathname.replace(/^\//, '');
+    if (key.startsWith('evidence/') || key.startsWith('documents/')) {
+      return key;
+    }
+  } catch {
+    // Not a valid URL, try regex match
+  }
+
+  // Try regex match for S3 URL pattern
+  const match = url.match(/\/(evidence\/.+|documents\/.+)/);
+  if (match) {
+    return match[1]; // Return the captured group (without leading slash)
   }
 
   return null;
