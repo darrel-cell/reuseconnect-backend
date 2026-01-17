@@ -1059,10 +1059,29 @@ export class JobService {
     const { uploadToS3, isS3Enabled } = await import('../utils/s3-storage');
     if (isS3Enabled()) {
       try {
-        // Upload photos to S3
+        // Helper function to check if a string is already an S3 URL/key (not base64)
+        const isS3Url = (url: string): boolean => {
+          return url.startsWith('evidence/') || 
+                 url.startsWith('documents/') ||
+                 (url.startsWith('https://') && url.includes('.s3.') && url.includes('amazonaws.com')) ||
+                 (url.startsWith('http://') && url.includes('.s3.') && url.includes('amazonaws.com'));
+        };
+
+        // Upload photos to S3 (only if they're base64, skip if already S3 URLs)
         if (photos.length > 0) {
           const photoUploads = await Promise.all(
             photos.map(async (photo, index) => {
+              // Skip upload if already an S3 URL/key
+              if (isS3Url(photo)) {
+                return photo;
+              }
+
+              // Only upload base64 data URLs
+              if (!photo.startsWith('data:')) {
+                // Not base64 and not S3 URL - might be local path, return as is
+                return photo;
+              }
+
               // Extract MIME type from base64 data URL
               const mimeMatch = photo.match(/data:([^;]+);base64,/);
               const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
@@ -1082,28 +1101,36 @@ export class JobService {
           uploadedPhotos = photoUploads;
         }
 
-        // Upload signature to S3
+        // Upload signature to S3 (only if it's base64, skip if already S3 URL)
         if (signature) {
-          const mimeMatch = signature.match(/data:([^;]+);base64,/);
-          const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-          const ext = mimeType === 'image/png' ? 'png' : 'jpg';
-          
-          const signatureUpload = await uploadToS3({
-            file: signature,
-            fileName: `${job.id}-signature.${ext}`,
-            folder: 'evidence/signatures',
-            contentType: mimeType,
-            isBase64: true,
-          });
-          
-          uploadedSignature = signatureUpload.url;
+          // Skip upload if already an S3 URL/key
+          if (!isS3Url(signature)) {
+            // Only upload if it's a base64 data URL
+            if (signature.startsWith('data:')) {
+              const mimeMatch = signature.match(/data:([^;]+);base64,/);
+              const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+              const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+              
+              const signatureUpload = await uploadToS3({
+                file: signature,
+                fileName: `${job.id}-signature.${ext}`,
+                folder: 'evidence/signatures',
+                contentType: mimeType,
+                isBase64: true,
+              });
+              
+              uploadedSignature = signatureUpload.url;
+            }
+            // If not base64 and not S3 URL (e.g., local path), keep as is
+          }
+          // If already S3 URL, keep as is
         }
       } catch (error) {
-        logger.error('Failed to upload evidence to S3, falling back to base64 storage', {
+        logger.error('Failed to upload evidence to S3, falling back to original storage', {
           error,
           jobId: job.id,
         });
-        // Fallback to base64 storage if S3 upload fails
+        // Fallback to original values if S3 upload fails
         uploadedPhotos = photos;
         uploadedSignature = signature;
       }
