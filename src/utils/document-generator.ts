@@ -473,9 +473,8 @@ export async function generateChainOfCustodyPDF(
         doc.fillColor('#ffffff')
           .fontSize(10)
           .font('Helvetica-Bold')
-          .text('Category', 50, yPos + 8, { width: 200 });
-        doc.text('Quantity', 250, yPos + 8, { width: 80 });
-        doc.text('Serial Numbers', 330, yPos + 8, { width: 220 });
+          .text('Category', 50, yPos + 8, { width: 400 });
+        doc.text('Quantity', 450, yPos + 8, { width: 105 });
         
         yPos += 30;
         doc.fillColor(textColor);
@@ -490,29 +489,15 @@ export async function generateChainOfCustodyPDF(
             doc.fillColor('#ffffff')
               .fontSize(10)
               .font('Helvetica-Bold')
-              .text('Category', 50, yPos + 8, { width: 200 });
-            doc.text('Quantity', 250, yPos + 8, { width: 80 });
-            doc.text('Serial Numbers', 330, yPos + 8, { width: 220 });
+              .text('Category', 50, yPos + 8, { width: 400 });
+            doc.text('Quantity', 450, yPos + 8, { width: 105 });
             yPos += 30;
           doc.fillColor(textColor);
           }
 
           const bgColor = index % 2 === 0 ? lightGray : '#ffffff';
-          let serialNumbers = '';
-          if (item.serialNumbers && item.serialNumbers.length > 0) {
-            const maxVisible = 5;
-            const visible = item.serialNumbers.slice(0, maxVisible);
-            const remaining = item.serialNumbers.length - visible.length;
-            serialNumbers = visible.join(', ');
-            if (remaining > 0) {
-              serialNumbers += `, + ${remaining} more`;
-            }
-          }
           
-          const rowHeight = Math.max(
-            doc.heightOfString(item.categoryName, { width: 200 }),
-            doc.heightOfString(serialNumbers, { width: 220 })
-          ) + 15;
+          const rowHeight = doc.heightOfString(item.categoryName, { width: 400 }) + 15;
 
           // Draw row background
           doc.rect(40, yPos - 5, 515, rowHeight)
@@ -523,18 +508,11 @@ export async function generateChainOfCustodyPDF(
           doc.fillColor(textColor)
             .fontSize(10)
             .font('Helvetica')
-            .text(item.categoryName, 50, yPos, { width: 200 });
+            .text(item.categoryName, 50, yPos, { width: 400 });
           
           doc.fillColor(textColor)
             .font('Helvetica-Bold')
-            .text(item.quantity.toString(), 250, yPos, { width: 80 });
-          
-          // Only show serial numbers if they exist
-          if (serialNumbers) {
-            doc.fillColor(textColor)
-              .font('Helvetica')
-              .text(serialNumbers, 330, yPos, { width: 220 });
-          }
+            .text(item.quantity.toString(), 450, yPos, { width: 105 });
           
           yPos += rowHeight;
         });

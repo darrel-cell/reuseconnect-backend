@@ -162,20 +162,26 @@ export class JobController {
         }
       }
 
-      if (signature && typeof signature === 'string' && signature.trim().length > 0) {
-        // Only validate if it's a base64 data URL (new upload), skip validation for S3 URLs
-        if (signature.startsWith('data:')) {
-          try {
-            validateBase64Image(signature, 'signature');
-          } catch (error) {
-            return res.status(400).json({
-              success: false,
-              error: error instanceof Error ? error.message : 'Invalid signature data',
-            } as ApiResponse);
-          }
-        }
-        // If it's an S3 URL/key, allow it without validation
+      // Signature is required for evidence submission
+      if (!signature || typeof signature !== 'string' || signature.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Signature is required for evidence submission',
+        } as ApiResponse);
       }
+
+      // Only validate if it's a base64 data URL (new upload), skip validation for S3 URLs
+      if (signature.startsWith('data:')) {
+        try {
+          validateBase64Image(signature, 'signature');
+        } catch (error) {
+          return res.status(400).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Invalid signature data',
+          } as ApiResponse);
+        }
+      }
+      // If it's an S3 URL/key, allow it without validation
 
       logger.debug('Evidence submission', {
         requestId: req.id,

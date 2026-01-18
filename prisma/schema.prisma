@@ -266,6 +266,7 @@ model Job {
   status          JobStatus @default(booked)
   scheduledDate   DateTime
   completedDate   DateTime?
+  estimatedArrival DateTime? // ETA calculated when driver starts (en_route status)
   co2eSaved       Float    @default(0)
   travelEmissions Float   @default(0)
   buybackValue    Float   @default(0)

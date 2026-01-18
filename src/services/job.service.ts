@@ -237,6 +237,7 @@ export class JobService {
             status: true,
             scheduledDate: true,
             completedDate: true,
+            estimatedArrival: true,
             co2eSaved: true,
             travelEmissions: true,
             buybackValue: true,
@@ -367,6 +368,7 @@ export class JobService {
             status: true,
             scheduledDate: true,
             completedDate: true,
+            estimatedArrival: true,
             co2eSaved: true,
             travelEmissions: true,
             buybackValue: true,
@@ -527,6 +529,7 @@ export class JobService {
             status: true,
             scheduledDate: true,
             completedDate: true,
+            estimatedArrival: true,
             co2eSaved: true,
             travelEmissions: true,
             buybackValue: true,
@@ -651,6 +654,7 @@ export class JobService {
             status: true,
             scheduledDate: true,
             completedDate: true,
+            estimatedArrival: true,
             co2eSaved: true,
             travelEmissions: true,
             buybackValue: true,
@@ -768,6 +772,29 @@ export class JobService {
     const updateData: any = { status: newStatus };
     if (newStatus === 'completed' && !job.completedDate) {
       updateData.completedDate = new Date();
+    }
+
+    // Calculate and store ETA when driver starts (status changes to en_route)
+    // Only calculate once when status FIRST changes to 'en_route' (don't recalculate if already set)
+    if (newStatus === 'en_route' && job.status !== 'en_route') {
+      // Only calculate if ETA is not already set
+      if (!job.estimatedArrival) {
+        const booking = job.bookingId ? await bookingRepo.findById(job.bookingId) : null;
+        const roundTripDistanceKm = booking?.roundTripDistanceKm ?? null;
+        const oneWayDistanceKm = roundTripDistanceKm ? roundTripDistanceKm / 2 : null;
+        
+        if (oneWayDistanceKm && oneWayDistanceKm > 0) {
+          // Calculate ETA = current time + estimated travel time
+          const averageSpeedKmh = 40;
+          const travelTimeMinutes = (oneWayDistanceKm / averageSpeedKmh) * 60;
+          const now = new Date();
+          const estimatedArrival = new Date(now.getTime() + travelTimeMinutes * 60 * 1000);
+          updateData.estimatedArrival = estimatedArrival;
+        } else if (job.scheduledDate) {
+          // Fall back to scheduled time if distance not available
+          updateData.estimatedArrival = job.scheduledDate;
+        }
+      }
     }
 
     await jobRepo.update(job.id, updateData);

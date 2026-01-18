@@ -9,8 +9,8 @@ const ALLOWED_IMAGE_TYPES = [
   'image/webp',
 ];
 
-// Maximum file size (10MB)
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+// Maximum file size (50MB)
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB in bytes
 
 /**
  * Validate base64 image string

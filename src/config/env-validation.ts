@@ -22,7 +22,7 @@ const envSchema = z.object({
   
   // File Upload
   UPLOAD_DIR: z.string().default('./uploads'),
-  MAX_FILE_SIZE: z.string().default('10485760').transform(Number).pipe(z.number().int().positive()),
+  MAX_FILE_SIZE: z.string().default('52428800').transform(Number).pipe(z.number().int().positive()), // 50MB default
   
   // ERP
   MOCK_ERP_ENABLED: z.string().default('true').transform(val => val !== 'false'),

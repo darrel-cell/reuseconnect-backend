@@ -21,20 +21,10 @@ export interface GradingRecordData {
 
 const gradeConditionFactors: Record<string, number> = {
   'A': 1.10,     // +10% above Grade B baseline
-  'B': 1.0,      // Baseline (100% - static buyback floor price)
+  'B': 1.0,      // Baseline (100% - buybackFloor)
   'C': 0.75,     // -25% below Grade B baseline
   'D': 0,        // Zero value
   'Recycled': 0, // No resale value
-};
-
-const baseResaleValues: Record<string, number> = {
-  'Laptop': 150,
-  'Desktop': 80,
-  'Server': 300,
-  'Smart Phones': 30,
-  'Tablets': 50,
-  'Networking': 45,
-  'Storage': 100,
 };
 
 export class GradingService {
@@ -70,20 +60,62 @@ export class GradingService {
       return [];
     }
 
-    // Transform job assets to grading records
-    const records = gradedAssets.map(asset => ({
-      id: asset.gradingRecordId || asset.id,
-      bookingId,
-      assetId: asset.categoryId,
-      assetCategory: asset.categoryName,
-      grade: asset.grade as 'A' | 'B' | 'C' | 'D' | 'Recycled',
-      resaleValue: asset.resaleValue || 0,
-      gradedAt: asset.updatedAt.toISOString(),
-      gradedBy: '', // We don't track this in JobAsset currently
-      notes: undefined,
-      condition: undefined,
-    }));
+    // Transform job assets to grading records and recalculate resale value (matching new booking formula)
+    const records = await Promise.all(gradedAssets.map(async (asset) => {
+      const category = asset.category;
+      if (!category) {
+        return {
+          id: asset.gradingRecordId || asset.id,
+          bookingId,
+          assetId: asset.categoryId,
+          assetCategory: asset.categoryName,
+          grade: asset.grade as 'A' | 'B' | 'C' | 'D' | 'Recycled',
+          resaleValue: asset.resaleValue || 0, // Fallback to stored value
+          gradedAt: asset.updatedAt.toISOString(),
+          gradedBy: '', // We don't track this in JobAsset currently
+          notes: undefined,
+          condition: undefined,
+        };
+      }
 
+      // Use buybackFloor directly (same as new booking calculation)
+      const buybackFloor = category.buybackFloor ?? 0;
+      
+      if (buybackFloor === 0) {
+        // Fallback to stored value if buybackFloor not set
+        return {
+          id: asset.gradingRecordId || asset.id,
+          bookingId,
+          assetId: asset.categoryId,
+          assetCategory: asset.categoryName,
+          grade: asset.grade as 'A' | 'B' | 'C' | 'D' | 'Recycled',
+          resaleValue: asset.resaleValue || 0,
+          gradedAt: asset.updatedAt.toISOString(),
+          gradedBy: '',
+          notes: undefined,
+          condition: undefined,
+        };
+      }
+
+      // Get grade-based condition factor
+      const conditionFactor = gradeConditionFactors[asset.grade as keyof typeof gradeConditionFactors] || 0;
+      
+      // Simple calculation matching new booking: buybackFloor × conditionFactor
+      const resaleValuePerUnit = buybackFloor * conditionFactor;
+
+      return {
+        id: asset.gradingRecordId || asset.id,
+        bookingId,
+        assetId: asset.categoryId,
+        assetCategory: asset.categoryName,
+        grade: asset.grade as 'A' | 'B' | 'C' | 'D' | 'Recycled',
+        resaleValue: resaleValuePerUnit, // Recalculated per-unit value
+        gradedAt: asset.updatedAt.toISOString(),
+        gradedBy: '',
+        notes: undefined,
+        condition: undefined,
+      };
+    }));
 
     return records;
   }
@@ -132,24 +164,6 @@ export class GradingService {
 
     const { logger } = await import('../utils/logger');
     
-    const config = await prisma.buybackConfig.findUnique({
-      where: { id: 'singleton' },
-    });
-    
-    const volumeFactor10 = config?.volumeFactor10 ?? 1.03;
-    const volumeFactor50 = config?.volumeFactor50 ?? 1.06;
-    const volumeFactor200 = config?.volumeFactor200 ?? 1.10;
-    const ageFactor = config?.ageFactor ?? 1.0; // Fixed at 3 years
-    const marketFactor = config?.marketFactor ?? 1.0;
-    
-    // Get volume factor based on quantity
-    const getVolumeFactor = (quantity: number): number => {
-      if (quantity >= 200) return volumeFactor200;
-      if (quantity >= 50) return volumeFactor50;
-      if (quantity >= 10) return volumeFactor10;
-      return 1.00; // 1-9 items
-    };
-    
     // Get category from database
     const category = jobAsset.category || await prisma.assetCategory.findUnique({
       where: { id: jobAsset.categoryId },
@@ -159,62 +173,31 @@ export class GradingService {
       throw new ValidationError(`Category not found for asset: ${assetId}`);
     }
     
-    // Calculate base buyback using RRP × residualLow (same as buyback calculator)
-    let baseBuyback: number;
+    // Use buybackFloor directly (same as new booking calculation)
+    const buybackFloor = category.buybackFloor ?? 0;
     
-    if (category.avgRRP != null && category.residualLow != null) {
-      // Use new database fields (RRP × residual_low %)
-      baseBuyback = category.avgRRP * category.residualLow;
-    } else if (category.avgBuybackValue != null && category.avgBuybackValue > 0) {
-      // Fallback to avgBuybackValue (already includes RRP × residual %)
-      baseBuyback = category.avgBuybackValue;
-    } else {
-      // Last resort: use hardcoded fallback
-      const categoryNameToMatch = (category.name || assetCategory).toLowerCase().trim();
-      baseBuyback = baseResaleValues[categoryNameToMatch] || 0;
-      
-      if (baseBuyback === 0) {
-        for (const [key, value] of Object.entries(baseResaleValues)) {
-          if (categoryNameToMatch.includes(key.toLowerCase()) || key.toLowerCase().includes(categoryNameToMatch)) {
-            baseBuyback = value;
-            break;
-          }
-        }
-      }
-    }
-    
-    if (baseBuyback === 0) {
-      logger.warn('No buyback values found for category', {
+    if (buybackFloor === 0) {
+      logger.warn('No buybackFloor defined for category', {
         categoryId: jobAsset.categoryId,
         categoryName: category.name,
       });
-      baseBuyback = 0;
     }
     
     // Get grade-based condition factor
     const conditionFactor = gradeConditionFactors[grade] || 0;
     
-    const volumeFactor = getVolumeFactor(jobAsset.quantity);
-    const rawResaleValuePerUnit = baseBuyback * ageFactor * conditionFactor * volumeFactor * marketFactor;
-    
-    // Apply floor and cap from database
-    const floor = category.buybackFloor ?? 0;
-    const cap = category.buybackCap ?? Infinity;
-    
-    const resaleValuePerUnit = Math.max(floor, Math.min(cap, rawResaleValuePerUnit));
+    // Simple calculation matching new booking: buybackFloor × conditionFactor
+    const resaleValuePerUnit = buybackFloor * conditionFactor;
     const totalResaleValue = Math.round(resaleValuePerUnit * jobAsset.quantity * 100) / 100;
     
     // Log resale value calculation (debug level)
-    logger.debug('Resale value calculation (buyback calculator logic)', {
+    logger.debug('Resale value calculation (matching new booking formula)', {
       assetCategory,
       categoryName: category.name,
       categoryId: jobAsset.categoryId,
-      baseBuyback,
+      buybackFloor,
       grade,
       conditionFactor,
-      volumeFactor,
-      ageFactor,
-      marketFactor,
       resaleValuePerUnit,
       quantity: jobAsset.quantity,
       totalResaleValue,
@@ -249,11 +232,11 @@ export class GradingService {
 
   /**
    * Calculate resale value for a category and grade
-   * Simple formula: buybackFloor × gradeFactor × quantity
+   * Uses the same simple formula as new booking calculation: buybackFloor × conditionFactor × quantity
    * 
    * Grade adjustments:
    * - Grade A: +10% (1.10 × buybackFloor)
-   * - Grade B: static buyback floor price (1.0 × buybackFloor)
+   * - Grade B: baseline (1.0 × buybackFloor)
    * - Grade C: -25% (0.75 × buybackFloor)
    * - Grade D: zero (0 × buybackFloor)
    * - Recycled: zero (0 × buybackFloor)
@@ -273,20 +256,20 @@ export class GradingService {
       logger.warn(`Category not found for resale value calculation: ${category}`);
       return 0;
     }
+
+    // Use buybackFloor directly (same as new booking calculation)
+    const buybackFloor = categoryRecord.buybackFloor ?? 0;
     
-    // Get buybackFloor from database
-    const buybackFloor = categoryRecord.buybackFloor;
-    
-    if (buybackFloor === null || buybackFloor === undefined) {
+    if (buybackFloor === 0) {
       logger.warn(`No buybackFloor defined for category: ${categoryRecord.name}`);
       return 0;
     }
     
-    // Get grade-based factor
-    const gradeFactor = gradeConditionFactors[grade] ?? 0;
+    // Get grade-based condition factor
+    const conditionFactor = gradeConditionFactors[grade] ?? 0;
     
-    // Simple calculation: buybackFloor × gradeFactor × quantity
-    const resaleValuePerUnit = buybackFloor * gradeFactor;
+    // Simple calculation matching new booking: buybackFloor × conditionFactor × quantity
+    const resaleValuePerUnit = buybackFloor * conditionFactor;
     const totalResaleValue = Math.round(resaleValuePerUnit * quantity * 100) / 100;
     
     return totalResaleValue;

@@ -114,7 +114,7 @@ NODE_ENV=development
 
 # File Upload
 UPLOAD_DIR="./uploads"
-MAX_FILE_SIZE=10485760
+MAX_FILE_SIZE=52428800  # 50MB in bytes
 
 # Mock ERP
 MOCK_ERP_ENABLED=true

@@ -36,6 +36,7 @@ export interface TransformedJob {
     vehicleFuelType?: 'petrol' | 'diesel' | 'electric';
     phone: string;
     eta?: string;
+    isEtaDelayed?: boolean; // True if calculated ETA is in the past (driver should have arrived)
   } | null;
   co2eSaved: number;
   travelEmissions: number;
@@ -134,37 +135,35 @@ export function transformJobForAPI(job: any): TransformedJob {
       };
 
       let eta: string | undefined;
-      const scheduledDate = job.scheduledDate instanceof Date ? job.scheduledDate : new Date(job.scheduledDate);
+      let isEtaDelayed: boolean | undefined;
       const now = new Date();
       
       if (job.status === 'routed') {
         // Driver hasn't started traveling yet - no ETA available
         eta = undefined; // Will display as "--:--" on frontend
       } else if (job.status === 'en_route') {
-        // Driver is currently traveling
-        if (scheduledDate > now) {
-          // Scheduled time hasn't passed - show scheduled arrival time
-          eta = scheduledDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-        } else {
-          // Scheduled time has passed - calculate from current time + travel time
-          const roundTripDistanceKm = job.booking?.roundTripDistanceKm ?? null;
-          const oneWayDistanceKm = roundTripDistanceKm ? roundTripDistanceKm / 2 : null;
+        // Use stored ETA (calculated and saved when driver started)
+        if (job.estimatedArrival) {
+          const estimatedArrival = job.estimatedArrival instanceof Date 
+            ? job.estimatedArrival 
+            : new Date(job.estimatedArrival);
           
-          if (oneWayDistanceKm && oneWayDistanceKm > 0) {
-            const averageSpeedKmh = 40;
-            const travelTimeMinutes = (oneWayDistanceKm / averageSpeedKmh) * 60;
-            const estimatedArrival = new Date(now.getTime() + travelTimeMinutes * 60 * 1000);
-            eta = estimatedArrival.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-          } else {
-            // No distance available, show scheduled time
-            eta = scheduledDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-          }
+          eta = estimatedArrival.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          
+          // Check if stored ETA is in the past (driver should have arrived but hasn't)
+          isEtaDelayed = estimatedArrival < now;
+        } else {
+          // No stored ETA - use scheduled time as fallback (don't recalculate from current time)
+          const scheduledDate = job.scheduledDate instanceof Date ? job.scheduledDate : new Date(job.scheduledDate);
+          eta = scheduledDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          isEtaDelayed = scheduledDate < now;
         }
       }
 
       return {
         ...driverData,
         ...(eta ? { eta } : {}),
+        ...(isEtaDelayed !== undefined ? { isEtaDelayed } : {}),
       };
     })() : null,
     co2eSaved: job.co2eSaved || 0,
