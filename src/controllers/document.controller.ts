@@ -126,31 +126,14 @@ export class DocumentController {
             } as ApiResponse);
           }
         } else {
-          // If we can't extract the key or S3 is not enabled, try to fetch the URL directly
-          // This might still have CORS issues, but it's a fallback
-          try {
-            // Use Node.js built-in fetch (available in Node 18+) or import node-fetch
-            const fetch = (globalThis as any).fetch || (await import('node-fetch')).default;
-            const fetchResponse = await fetch(filePath);
-            if (!fetchResponse.ok) {
-              throw new Error(`Failed to fetch: ${fetchResponse.statusText}`);
-            }
-            const arrayBuffer = await fetchResponse.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            const fileName = path.basename(filePath.split('?')[0]); // Remove query params
-            
-            res.setHeader('Content-Type', fetchResponse.headers.get('content-type') || 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-            res.send(buffer);
-            return;
-          } catch (error) {
-            const { logger } = await import('../utils/logger');
-            logger.error('Failed to fetch file from URL', { error, documentId: id, filePath });
-            return res.status(500).json({
-              success: false,
-              error: 'Failed to download document',
-            } as ApiResponse);
-          }
+          // If we can't extract the key or S3 is not enabled, return error
+          // We should always be able to extract the key from S3 URLs
+          const { logger } = await import('../utils/logger');
+          logger.error('Cannot extract S3 key from URL', { documentId: id, filePath });
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to download document: Invalid file path',
+          } as ApiResponse);
         }
       }
 
