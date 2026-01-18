@@ -184,7 +184,39 @@ export function isS3Enabled(): boolean {
 }
 
 /**
- * Extract S3 key from URL
+ * Get file from S3 as a stream
+ * Used for proxying S3 files through the backend to avoid CORS issues
+ */
+export async function getFileFromS3(key: string): Promise<{ Body: any; ContentType?: string; ContentLength?: number }> {
+  if (!validatedConfig.s3.useS3 || !s3Client) {
+    throw new Error('S3 storage is not enabled.');
+  }
+
+  try {
+    const command = new GetObjectCommand({
+      Bucket: validatedConfig.s3.bucketName,
+      Key: key,
+    });
+
+    const response = await s3Client.send(command);
+    
+    if (!response.Body) {
+      throw new Error('File not found in S3');
+    }
+
+    return {
+      Body: response.Body,
+      ContentType: response.ContentType,
+      ContentLength: response.ContentLength,
+    };
+  } catch (error) {
+    logger.error('Failed to get file from S3', { error, key });
+    throw new Error(`Failed to get file from S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Extract S3 key from URL (including presigned URLs)
  */
 export function extractS3KeyFromUrl(url: string): string | null {
   // If it's already a key (just the path)
@@ -193,22 +225,37 @@ export function extractS3KeyFromUrl(url: string): string | null {
   }
 
   // If URL is a full S3 URL (e.g., https://bucket.s3.region.amazonaws.com/evidence/photos/file.jpg)
-  // Extract the key part after the domain
+  // or presigned URL (e.g., https://bucket.s3.region.amazonaws.com/evidence/photos/file.jpg?X-Amz-Algorithm=...)
+  // Extract the key part after the domain (before query params)
   try {
     const urlObj = new URL(url);
-    // Remove leading slash from pathname
-    const key = urlObj.pathname.replace(/^\//, '');
+    // Remove leading slash from pathname and get path before query params
+    let key = urlObj.pathname.replace(/^\//, '');
+    
+    // For presigned URLs, the key might be in the pathname
     if (key.startsWith('evidence/') || key.startsWith('documents/')) {
       return key;
+    }
+    
+    // Sometimes the key might be URL-encoded in presigned URLs
+    // Try decoding it
+    try {
+      const decodedKey = decodeURIComponent(key);
+      if (decodedKey.startsWith('evidence/') || decodedKey.startsWith('documents/')) {
+        return decodedKey;
+      }
+    } catch {
+      // Decoding failed, continue with original key
     }
   } catch {
     // Not a valid URL, try regex match
   }
 
-  // Try regex match for S3 URL pattern
-  const match = url.match(/\/(evidence\/.+|documents\/.+)/);
+  // Try regex match for S3 URL pattern (handles both regular and presigned URLs)
+  // Match pattern: /evidence/... or /documents/... (before query params)
+  const match = url.match(/\/(evidence\/[^?]+|documents\/[^?]+)/);
   if (match) {
-    return match[1]; // Return the captured group (without leading slash)
+    return match[1].replace(/^\//, ''); // Return the captured group (without leading slash)
   }
 
   return null;

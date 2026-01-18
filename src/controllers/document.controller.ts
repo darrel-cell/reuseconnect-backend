@@ -79,10 +79,79 @@ export class DocumentController {
         } as ApiResponse);
       }
 
-      // Check if it's an S3 URL (http/https) - redirect to presigned URL
+      // Check if it's an S3 URL (http/https) - proxy through backend to avoid CORS
       if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-        // It's already a presigned URL or public S3 URL, redirect
-        return res.redirect(filePath);
+        // Extract S3 key from URL or presigned URL
+        const { extractS3KeyFromUrl, getFileFromS3, isS3Enabled } = await import('../utils/s3-storage');
+        const s3Key = extractS3KeyFromUrl(filePath);
+        
+        if (s3Key && isS3Enabled()) {
+          try {
+            // Get file from S3 and stream it to client
+            const s3File = await getFileFromS3(s3Key);
+            const fileName = path.basename(s3Key);
+            
+            res.setHeader('Content-Type', s3File.ContentType || 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+            if (s3File.ContentLength) {
+              res.setHeader('Content-Length', s3File.ContentLength.toString());
+            }
+            
+            // Stream the file body to response
+            // AWS SDK GetObjectCommand returns Body as a Readable stream
+            const stream = s3File.Body as any;
+            if (stream && typeof stream.pipe === 'function') {
+              // It's a readable stream, pipe it directly
+              stream.pipe(res);
+            } else if (stream && typeof stream[Symbol.asyncIterator] === 'function') {
+              // It's an async iterable, convert to buffer
+              const chunks: Buffer[] = [];
+              for await (const chunk of stream) {
+                chunks.push(Buffer.from(chunk));
+              }
+              const buffer = Buffer.concat(chunks);
+              res.send(buffer);
+            } else {
+              // Convert to buffer if it's already a buffer or Uint8Array
+              const buffer = Buffer.from(stream);
+              res.send(buffer);
+            }
+            return;
+          } catch (error) {
+            const { logger } = await import('../utils/logger');
+            logger.error('Failed to proxy S3 file', { error, documentId: id, s3Key });
+            return res.status(500).json({
+              success: false,
+              error: 'Failed to download document from storage',
+            } as ApiResponse);
+          }
+        } else {
+          // If we can't extract the key or S3 is not enabled, try to fetch the URL directly
+          // This might still have CORS issues, but it's a fallback
+          try {
+            // Use Node.js built-in fetch (available in Node 18+) or import node-fetch
+            const fetch = (globalThis as any).fetch || (await import('node-fetch')).default;
+            const fetchResponse = await fetch(filePath);
+            if (!fetchResponse.ok) {
+              throw new Error(`Failed to fetch: ${fetchResponse.statusText}`);
+            }
+            const arrayBuffer = await fetchResponse.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            const fileName = path.basename(filePath.split('?')[0]); // Remove query params
+            
+            res.setHeader('Content-Type', fetchResponse.headers.get('content-type') || 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+            res.send(buffer);
+            return;
+          } catch (error) {
+            const { logger } = await import('../utils/logger');
+            logger.error('Failed to fetch file from URL', { error, documentId: id, filePath });
+            return res.status(500).json({
+              success: false,
+              error: 'Failed to download document',
+            } as ApiResponse);
+          }
+        }
       }
 
       // Local file - check if exists and stream
