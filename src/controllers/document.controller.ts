@@ -89,7 +89,28 @@ export class DocumentController {
           try {
             // Get file from S3 and stream it to client
             const s3File = await getFileFromS3(s3Key);
-            const fileName = path.basename(s3Key);
+            
+            // Extract filename from S3 key and fix extension if timestamp was appended after it
+            // S3 keys are like: documents/filename.pdf-1234567890
+            // We need: filename.pdf
+            let fileName = path.basename(s3Key);
+            
+            // If filename has a timestamp suffix after the extension (e.g., file.pdf-1234567890)
+            // Extract the proper filename with extension
+            const timestampSuffixMatch = fileName.match(/^(.+\.(pdf|PDF))-(\d+)$/);
+            if (timestampSuffixMatch) {
+              // Extract filename before timestamp (e.g., "file.pdf" from "file.pdf-1234567890")
+              fileName = timestampSuffixMatch[1];
+            } else {
+              // If no timestamp suffix, try to ensure .pdf extension is present
+              // Check if it ends with .pdf (case insensitive)
+              if (!fileName.toLowerCase().endsWith('.pdf')) {
+                // If ContentType suggests it's a PDF, add .pdf extension
+                if (s3File.ContentType?.includes('pdf')) {
+                  fileName = `${fileName}.pdf`;
+                }
+              }
+            }
             
             res.setHeader('Content-Type', s3File.ContentType || 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
