@@ -1,5 +1,5 @@
 // S3 Storage Utility - Handles file uploads to AWS S3
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { validatedConfig } from '../config/env-validation';
 import { logger } from './logger';
@@ -173,6 +173,71 @@ export async function deleteFromS3(key: string): Promise<void> {
   } catch (error) {
     logger.error('Failed to delete file from S3', { error, key });
     throw new Error(`Failed to delete file from S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Delete all files from S3 bucket
+ * WARNING: This will delete ALL files in the bucket!
+ */
+export async function deleteAllFromS3(): Promise<number> {
+  if (!validatedConfig.s3.useS3 || !s3Client) {
+    logger.warn('S3 storage is not enabled. Skipping S3 cleanup.');
+    return 0;
+  }
+
+  try {
+    let deletedCount = 0;
+    let continuationToken: string | undefined;
+
+    do {
+      // List objects in the bucket
+      const listCommand = new ListObjectsV2Command({
+        Bucket: validatedConfig.s3.bucketName,
+        ContinuationToken: continuationToken,
+      });
+
+      const listResponse = await s3Client.send(listCommand);
+
+      if (!listResponse.Contents || listResponse.Contents.length === 0) {
+        break; // No more objects
+      }
+
+      // Delete objects in batches (S3 allows up to 1000 objects per delete request)
+      const objectsToDelete = listResponse.Contents.map(obj => ({
+        Key: obj.Key!,
+      }));
+
+      if (objectsToDelete.length > 0) {
+        const deleteCommand = new DeleteObjectsCommand({
+          Bucket: validatedConfig.s3.bucketName,
+          Delete: {
+            Objects: objectsToDelete,
+            Quiet: false, // Return deleted objects in response
+          },
+        });
+
+        const deleteResponse = await s3Client.send(deleteCommand);
+        
+        if (deleteResponse.Deleted) {
+          deletedCount += deleteResponse.Deleted.length;
+        }
+
+        if (deleteResponse.Errors && deleteResponse.Errors.length > 0) {
+          logger.warn('Some S3 objects failed to delete', {
+            errors: deleteResponse.Errors,
+          });
+        }
+      }
+
+      continuationToken = listResponse.NextContinuationToken;
+    } while (continuationToken);
+
+    logger.info(`Deleted ${deletedCount} files from S3 bucket`);
+    return deletedCount;
+  } catch (error) {
+    logger.error('Failed to delete all files from S3', { error });
+    throw new Error(`Failed to delete all files from S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 

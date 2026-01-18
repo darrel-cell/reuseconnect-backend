@@ -1,6 +1,7 @@
 // Script to clean up database and seed with admin company, admin user, and asset categories
 import prisma from './src/config/database';
 import { hashPassword } from './src/utils/password';
+import { deleteAllFromS3, isS3Enabled } from './src/utils/s3-storage';
 
 async function cleanupDatabase() {
   console.log('🧹 Starting database cleanup...\n');
@@ -34,6 +35,20 @@ async function cleanupDatabase() {
     } else {
       reuseTenantId = reuseTenant.id;
       console.log(`✅ Found Reuse Connect ITAD Platform tenant: ${reuseTenant.name} (${reuseTenantId})\n`);
+    }
+
+    // Step 0: Delete all S3 files (if S3 is enabled)
+    if (isS3Enabled()) {
+      console.log('☁️  Deleting all S3 files...');
+      try {
+        const deletedS3Files = await deleteAllFromS3();
+        console.log(`   ✅ Deleted ${deletedS3Files} files from S3\n`);
+      } catch (error) {
+        console.error(`   ⚠️  Failed to delete S3 files: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.log('   Continuing with database cleanup...\n');
+      }
+    } else {
+      console.log('☁️  S3 storage is not enabled. Skipping S3 cleanup.\n');
     }
 
     // Step 1: Delete all bookings (this will cascade delete BookingAsset, BookingStatusHistory)
@@ -252,6 +267,9 @@ async function cleanupDatabase() {
 
     // Summary
     console.log('📊 Cleanup & Seed Summary:');
+    if (isS3Enabled()) {
+      console.log(`   - S3 files deleted: (see above)`);
+    }
     console.log(`   - Bookings deleted: ${deletedBookings.count}`);
     console.log(`   - Jobs deleted: ${deletedJobs.count}`);
     console.log(`   - Driver profiles deleted: ${deletedDriverProfiles.count}`);
