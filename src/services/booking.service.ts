@@ -811,7 +811,11 @@ export class BookingService {
         // Default vehicle type is "Van" (0.24 kg/km), but if fuel type is specified, use that fuel type's emission factor
         // If no fuel type specified, default to Van's emission factor
         const vehicleFuelType = updatedBooking.preferredVehicleType || 'van'; // Default to 'van' (0.24 kg/km) if not specified
-        const roundTripDistanceKm = updatedBooking.roundTripDistanceKm || 80; // Fallback to 80km if not set
+        // Use 0 if distance is not available (instead of defaulting to 80km)
+        // This allows proper error handling when distance calculation failed
+        const roundTripDistanceKm = (updatedBooking.roundTripDistanceKm && updatedBooking.roundTripDistanceKm > 0)
+          ? updatedBooking.roundTripDistanceKm
+          : 0;
         const travelEmissions = calculateTravelEmissions(roundTripDistanceKm, vehicleFuelType);
 
         // Create job with status 'booked'

@@ -119,13 +119,12 @@ export class DashboardController {
       const avgEmissionsPerKm = 0.24; // Fallback for jobs without booking distance
       let totalDistanceKm = 0;
       for (const job of jobs) {
-        if (job.booking?.roundTripDistanceKm) {
+        if (job.booking?.roundTripDistanceKm && job.booking.roundTripDistanceKm > 0) {
           // Use actual distance from booking
           totalDistanceKm += job.booking.roundTripDistanceKm;
-        } else if (job.travelEmissions && job.travelEmissions > 0) {
-          // Fallback: estimate from emissions if booking distance not available
-          totalDistanceKm += job.travelEmissions / avgEmissionsPerKm;
         }
+        // Do not use travelEmissions / avgEmissionsPerKm as fallback - this is inaccurate
+        // If distance is not available, skip it (distance remains 0) to show accurate stats
       }
 
       // Separate completed and booked jobs

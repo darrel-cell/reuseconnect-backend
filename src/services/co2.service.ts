@@ -35,15 +35,15 @@ export class CO2Service {
           config.routing?.openRouteServiceApiKey
         );
       } catch (error) {
-        // Log error but don't throw - fallback to default distance
+        // Log error - do not use default value, let UI show error/warning
         // This can fail if fetch API is not available (Node.js < 18) or network issues
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        console.error('Error calculating road distance, using default 80km:', errorMsg);
-        distanceKm = 80;
+        console.error('Error calculating road distance, distance will be 0:', errorMsg);
+        distanceKm = 0; // Set to 0 to indicate calculation failed
       }
     }
-    if (!distanceKm || isNaN(distanceKm)) {
-      distanceKm = 80; // Default 80km round trip
+    if (!distanceKm || isNaN(distanceKm) || distanceKm <= 0) {
+      distanceKm = 0; // Set to 0 to indicate distance is not available or invalid
     }
 
     // Convert categories to format expected by calculation

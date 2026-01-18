@@ -36,7 +36,11 @@ export class JobService {
     }
 
     const vehicleFuelType = driver.driverProfile?.vehicleFuelType || booking.preferredVehicleType || 'van';
-    const roundTripDistanceKm = booking.roundTripDistanceKm || 80;
+    // Use 0 if distance is not available (instead of defaulting to 80km)
+    // This allows proper error handling when distance calculation failed
+    const roundTripDistanceKm = (booking.roundTripDistanceKm && booking.roundTripDistanceKm > 0) 
+      ? booking.roundTripDistanceKm 
+      : 0;
     const travelEmissions = calculateTravelEmissions(roundTripDistanceKm, vehicleFuelType);
 
     let job: any = await jobRepo.findByBookingId(booking.id);
@@ -325,19 +329,28 @@ export class JobService {
         },
       };
     } else if (filters.userRole === 'driver') {
-      // Drivers should only see active jobs (exclude "warehouse", "sanitised", "graded", "completed")
-      // Jobs at "warehouse" or beyond should only appear in Job History, not in active jobs list
       const excludedStatuses = ['warehouse', 'sanitised', 'graded', 'completed'];
       const where: any = {
         driverId: filters.userId,
-        status: {
-          notIn: excludedStatuses,
-        },
       };
       
-      // If a specific status filter is provided, apply it (but still exclude warehouse+ statuses)
-      if (filters.status && !excludedStatuses.includes(filters.status)) {
+      // Check if requesting history jobs (warehouse+ statuses)
+      // If status filter includes warehouse+ statuses, allow them (for history page)
+      const isHistoryRequest = filters.status && excludedStatuses.includes(filters.status);
+      
+      if (isHistoryRequest) {
+        // For history page: include only warehouse+ statuses
+        where.status = {
+          in: excludedStatuses,
+        };
+      } else if (filters.status && !excludedStatuses.includes(filters.status)) {
+        // Specific active status filter
         where.status = filters.status;
+      } else {
+        // Default: exclude warehouse+ statuses for active jobs list
+        where.status = {
+          notIn: excludedStatuses,
+        };
       }
       
       const [data, total] = await Promise.all([
@@ -353,6 +366,11 @@ export class JobService {
             siteAddress: true,
             status: true,
             scheduledDate: true,
+            completedDate: true,
+            co2eSaved: true,
+            travelEmissions: true,
+            buybackValue: true,
+            charityPercent: true,
             createdAt: true,
             updatedAt: true,
             booking: {

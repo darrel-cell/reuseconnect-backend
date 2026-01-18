@@ -116,7 +116,9 @@ export function calculateCO2e(input: CO2CalculationInput): CO2CalculationResult 
   const { assets, distanceKm, vehicleType, categories } = input;
 
   const reuseSavings = calculateReuseCO2e(assets, categories);
-  const distance = distanceKm || 80;
+  // Use 0 if distance is not provided or invalid (instead of defaulting to 80km)
+  // This allows the UI to show error/warning when distance calculation fails
+  const distance = (distanceKm && distanceKm > 0) ? distanceKm : 0;
   const vehicleEmissionsAll = calculateAllVehicleEmissions(distance);
   const selectedVehicleType = vehicleType || 'petrol';
   const travelEmissions = selectedVehicleType === 'electric'

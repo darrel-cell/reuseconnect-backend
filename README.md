@@ -51,12 +51,32 @@ npm install
 
 ### 2. Database Setup
 
-1. Create a PostgreSQL database
-2. Copy `.env.example` to `.env` and update `DATABASE_URL`:
+#### Development (Local PostgreSQL)
+
+1. Create a local PostgreSQL database
+2. Set `DATABASE_URL` in your `.env` file:
 
 ```env
+NODE_ENV=development
 DATABASE_URL="postgresql://user:password@localhost:5432/itad_db?schema=public"
 ```
+
+#### Production (AWS RDS)
+
+1. Set up your AWS RDS PostgreSQL instance
+2. In your production `.env` file, set both `DATABASE_URL` and `DATABASE_URL_PROD`:
+
+```env
+NODE_ENV=production
+# Local database (fallback, optional in production)
+DATABASE_URL="postgresql://user:password@localhost:5432/itad_db?schema=public"
+# RDS database (used automatically in production)
+DATABASE_URL_PROD="postgresql://postgres:password@your-rds-instance.xxxxxxxxx.eu-west-2.rds.amazonaws.com:5432/itaddb?schema=public"
+```
+
+**Note:** The application automatically selects the correct database:
+- **Development**: Uses `DATABASE_URL` (local PostgreSQL)
+- **Production**: Uses `DATABASE_URL_PROD` (RDS) if set, otherwise falls back to `DATABASE_URL`
 
 3. Generate Prisma client and push schema:
 
@@ -74,8 +94,15 @@ For production, use `npx prisma migrate deploy` or continue using `db:push`.
 Create a `.env` file with:
 
 ```env
+# Server
+NODE_ENV=development
+PORT=3000
+
 # Database
+# Development: Local PostgreSQL
 DATABASE_URL="postgresql://user:password@localhost:5432/itad_db?schema=public"
+# Production: AWS RDS (set this when deploying to production)
+# DATABASE_URL_PROD="postgresql://postgres:password@your-rds-instance.xxxxxxxxx.eu-west-2.rds.amazonaws.com:5432/itaddb?schema=public"
 
 # JWT
 JWT_SECRET="your-super-secret-jwt-key-change-in-production"

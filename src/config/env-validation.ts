@@ -11,7 +11,10 @@ const envSchema = z.object({
   PORT: z.string().default('3000').transform(Number).pipe(z.number().int().positive()),
   
   // Database
+  // In development: use DATABASE_URL (local PostgreSQL)
+  // In production: use DATABASE_URL_PROD (RDS) if set, otherwise fall back to DATABASE_URL
   DATABASE_URL: z.string().url('DATABASE_URL must be a valid URL'),
+  DATABASE_URL_PROD: z.string().url('DATABASE_URL_PROD must be a valid URL').optional(),
   
   // JWT
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
@@ -81,12 +84,25 @@ try {
   throw error;
 }
 
+// Determine which database URL to use based on environment
+const getDatabaseUrl = (): string => {
+  // In production, prefer DATABASE_URL_PROD (RDS) if set
+  if (env.NODE_ENV === 'production' && env.DATABASE_URL_PROD) {
+    return env.DATABASE_URL_PROD;
+  }
+  // Otherwise, use DATABASE_URL (local PostgreSQL for development, or fallback in production)
+  return env.DATABASE_URL;
+};
+
 // Export validated config
 export const validatedConfig = {
   port: env.PORT,
   nodeEnv: env.NODE_ENV,
   database: {
-    url: env.DATABASE_URL,
+    url: getDatabaseUrl(),
+    // Store both URLs for reference
+    urlDev: env.DATABASE_URL,
+    urlProd: env.DATABASE_URL_PROD,
   },
   jwt: {
     secret: env.JWT_SECRET,
