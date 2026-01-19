@@ -74,4 +74,33 @@ export class AuthController {
       return next(error);
     }
   }
+
+  async changePassword(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized',
+        } as ApiResponse);
+      }
+
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          error: 'Current password and new password are required',
+        } as ApiResponse);
+      }
+
+      await authService.changePassword(req.user.userId, currentPassword, newPassword);
+
+      return res.json({
+        success: true,
+        data: { message: 'Password changed successfully' },
+      } as ApiResponse);
+    } catch (error) {
+      return next(error);
+    }
+  }
 }

@@ -247,4 +247,45 @@ export class AuthService {
       createdAt: user.createdAt.toISOString(),
     };
   }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    // Get user
+    const user = await userRepo.findById(userId);
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    // Verify current password
+    const isValid = await comparePassword(currentPassword, user.password);
+    if (!isValid) {
+      throw new UnauthorizedError('Current password is incorrect');
+    }
+
+    // Validate new password strength
+    if (newPassword.length < 8) {
+      throw new ValidationError('Password must be at least 8 characters long');
+    }
+
+    if (!/[A-Z]/.test(newPassword)) {
+      throw new ValidationError('Password must contain at least one uppercase letter');
+    }
+
+    if (!/[a-z]/.test(newPassword)) {
+      throw new ValidationError('Password must contain at least one lowercase letter');
+    }
+
+    if (!/\d/.test(newPassword)) {
+      throw new ValidationError('Password must contain at least one number');
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update user password
+    await userRepo.update(userId, {
+      password: hashedPassword,
+    });
+
+    return { success: true };
+  }
 }

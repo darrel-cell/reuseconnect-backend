@@ -33,4 +33,14 @@ router.get(
   authController.getCurrentUser.bind(authController)
 );
 
+router.post(
+  '/change-password',
+  authenticate,
+  validate([
+    body('currentPassword').notEmpty().withMessage('Current password is required'),
+    body('newPassword').isLength({ min: 8 }).withMessage('New password must be at least 8 characters'),
+  ]),
+  authController.changePassword.bind(authController)
+);
+
 export default router;
