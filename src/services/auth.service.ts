@@ -5,6 +5,7 @@ import { generateToken } from '../utils/jwt';
 import { ValidationError, NotFoundError, UnauthorizedError } from '../utils/errors';
 import { UserRole } from '../types';
 import prisma from '../config/database';
+import { sanitizeString } from '../utils/sanitize';
 // UUID generation not needed for Prisma (auto-generated)
 
 const userRepo = new UserRepository();
@@ -67,6 +68,10 @@ export class AuthService {
     companyName: string;
     role?: 'client' | 'reseller';
   }) {
+    // Sanitize user inputs to prevent XSS
+    const sanitizedName = sanitizeString(data.name);
+    const sanitizedCompanyName = sanitizeString(data.companyName);
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(data.email)) {
@@ -99,7 +104,7 @@ export class AuthService {
 
     // Create tenant
     const tenant = await tenantRepo.create({
-      name: data.companyName,
+      name: sanitizedCompanyName,
       slug: slug,
       primaryColor: '168, 70%, 35%',
       accentColor: '168, 60%, 45%',
@@ -117,7 +122,7 @@ export class AuthService {
 
     const user = await userRepo.create({
       email: data.email,
-      name: data.name,
+      name: sanitizedName,
       password: hashedPassword,
       role: userRole,
       status: userStatus,
@@ -170,9 +175,9 @@ export class AuthService {
       await prisma.client.create({
         data: {
           tenantId: tenant.id,
-          name: data.name,
+          name: sanitizedName,
           email: data.email,
-          organisationName: data.companyName, // Save companyName as organisationName
+          organisationName: sanitizedCompanyName, // Save companyName as organisationName
           status: 'active',
         },
       });
@@ -183,7 +188,7 @@ export class AuthService {
       await prisma.organisationProfile.create({
         data: {
           userId: user.id,
-          organisationName: data.companyName,
+          organisationName: sanitizedCompanyName,
           // These can be completed later in Settings → Organisation section
           registrationNumber: '',
           address: '',

@@ -2,6 +2,7 @@
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { NotFoundError, ValidationError } from '../utils/errors';
+import { sanitizeString } from '../utils/sanitize';
 
 export interface CreateSiteData {
   name: string;
@@ -186,8 +187,15 @@ export class SiteService {
    */
   async createSite(data: CreateSiteData, userId: string, tenantId: string, userRole: string) {
     try {
+      // Sanitize user inputs to prevent XSS
+      const sanitizedName = sanitizeString(data.name);
+      const sanitizedAddress = sanitizeString(data.address);
+      const sanitizedPostcode = sanitizeString(data.postcode);
+      const sanitizedContactName = data.contactName ? sanitizeString(data.contactName) : undefined;
+      const sanitizedContactPhone = data.contactPhone ? sanitizeString(data.contactPhone) : undefined;
+
       // Validate required fields
-      if (!data.name || !data.address || !data.postcode) {
+      if (!sanitizedName || !sanitizedAddress || !sanitizedPostcode) {
         throw new ValidationError('Name, address, and postcode are required');
       }
 
@@ -275,13 +283,13 @@ export class SiteService {
         data: {
           clientId,
           tenantId: siteTenantId, // Use the determined tenantId
-          name: data.name,
-          address: data.address,
-          postcode: data.postcode,
+          name: sanitizedName,
+          address: sanitizedAddress,
+          postcode: sanitizedPostcode,
           lat: data.lat,
           lng: data.lng,
-          contactName: data.contactName,
-          contactPhone: data.contactPhone,
+          contactName: sanitizedContactName,
+          contactPhone: sanitizedContactPhone,
         },
         include: {
           client: {
@@ -314,18 +322,20 @@ export class SiteService {
       // Verify site exists and user has access (getSiteById throws if not found/unauthorized)
       await this.getSiteById(siteId, userId, tenantId, userRole);
 
+      // Sanitize user inputs to prevent XSS
+      const updateData: any = {};
+      if (data.name !== undefined) updateData.name = sanitizeString(data.name);
+      if (data.address !== undefined) updateData.address = sanitizeString(data.address);
+      if (data.postcode !== undefined) updateData.postcode = sanitizeString(data.postcode);
+      if (data.lat !== undefined) updateData.lat = data.lat;
+      if (data.lng !== undefined) updateData.lng = data.lng;
+      if (data.contactName !== undefined) updateData.contactName = data.contactName ? sanitizeString(data.contactName) : null;
+      if (data.contactPhone !== undefined) updateData.contactPhone = data.contactPhone ? sanitizeString(data.contactPhone) : null;
+
       // Update site
       const site = await prisma.site.update({
         where: { id: siteId },
-        data: {
-          name: data.name,
-          address: data.address,
-          postcode: data.postcode,
-          lat: data.lat,
-          lng: data.lng,
-          contactName: data.contactName,
-          contactPhone: data.contactPhone,
-        },
+        data: updateData,
         include: {
           client: {
             select: {

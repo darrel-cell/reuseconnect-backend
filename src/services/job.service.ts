@@ -1087,10 +1087,13 @@ export class JobService {
     });
 
     // Validate that evidence data exists - prevent empty evidence records
+    // Import sanitization utilities
+    const { sanitizeString, sanitizeStringArray } = await import('../utils/sanitize');
+    
     const photos = Array.isArray(data.photos) ? data.photos.filter((p: any) => p && typeof p === 'string' && p.trim().length > 0) : [];
     const signature = (data.signature && typeof data.signature === 'string' && data.signature.trim().length > 0) ? data.signature : null;
-    const sealNumbers = Array.isArray(data.sealNumbers) ? data.sealNumbers.filter((s: any) => s && typeof s === 'string' && s.trim().length > 0) : [];
-    const notes = (data.notes && typeof data.notes === 'string' && data.notes.trim().length > 0) ? data.notes : null;
+    const sealNumbers = sanitizeStringArray(data.sealNumbers); // Sanitize seal numbers to prevent XSS
+    const notes = (data.notes && typeof data.notes === 'string' && data.notes.trim().length > 0) ? sanitizeString(data.notes) : null;
 
     // Require at least one photo OR a signature to create evidence record
     if (photos.length === 0 && !signature) {
@@ -1253,16 +1256,19 @@ export class JobService {
       );
     }
 
-    // Update job with journey fields (trim whitespace from all fields)
+    // Import sanitization utilities
+    const { sanitizeString } = await import('../utils/sanitize');
+
+    // Update job with journey fields (sanitize and trim whitespace from all fields)
     await jobRepo.update(job.id, {
-      dial2Collection: data.dial2Collection?.trim(),
-      securityRequirements: data.securityRequirements?.trim(),
-      idRequired: data.idRequired?.trim(),
-      loadingBayLocation: data.loadingBayLocation?.trim(),
-      vehicleHeightRestrictions: data.vehicleHeightRestrictions?.trim(),
-      doorLiftSize: data.doorLiftSize?.trim(),
-      roadWorksPublicEvents: data.roadWorksPublicEvents?.trim(),
-      manualHandlingRequirements: data.manualHandlingRequirements?.trim(),
+      dial2Collection: data.dial2Collection ? sanitizeString(data.dial2Collection.trim()) : undefined,
+      securityRequirements: data.securityRequirements ? sanitizeString(data.securityRequirements.trim()) : undefined,
+      idRequired: data.idRequired ? sanitizeString(data.idRequired.trim()) : undefined,
+      loadingBayLocation: data.loadingBayLocation ? sanitizeString(data.loadingBayLocation.trim()) : undefined,
+      vehicleHeightRestrictions: data.vehicleHeightRestrictions ? sanitizeString(data.vehicleHeightRestrictions.trim()) : undefined,
+      doorLiftSize: data.doorLiftSize ? sanitizeString(data.doorLiftSize.trim()) : undefined,
+      roadWorksPublicEvents: data.roadWorksPublicEvents ? sanitizeString(data.roadWorksPublicEvents.trim()) : undefined,
+      manualHandlingRequirements: data.manualHandlingRequirements ? sanitizeString(data.manualHandlingRequirements.trim()) : undefined,
     });
 
     return this.getJobById(job.id);
