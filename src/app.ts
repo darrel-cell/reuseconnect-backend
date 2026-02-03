@@ -24,6 +24,7 @@ import notificationRoutes from './routes/notification.routes';
 import organisationProfileRoutes from './routes/organisation-profile.routes';
 import documentRoutes from './routes/document.routes';
 import siteRoutes from './routes/site.routes';
+import uploadsRoutes from './routes/uploads.routes';
 
 const app: Express = express();
 
@@ -155,8 +156,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Serve static files (documents, evidence, etc.)
-app.use('/uploads', express.static('uploads'));
+// Secure file serving - requires authentication
+app.use('/uploads', uploadsRoutes);
 
 // Health check
 app.get('/health', async (req: Request, res: Response) => {
