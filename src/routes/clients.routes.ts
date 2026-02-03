@@ -33,10 +33,8 @@ router.get(
         where.resellerId = req.user.userId;
       }
       
-      // Filter by status if provided (e.g., 'active' for booking page)
-      if (req.query.status) {
-        where.status = req.query.status;
-      }
+      // Note: We don't filter by status here because status can come from either
+      // Client.status or User.status. We'll filter after fetching user status.
 
       // Search query filter
       if (req.query.searchQuery) {
@@ -50,44 +48,38 @@ router.get(
       // Parse pagination parameters with defaults
       const page = req.query.page ? Math.max(1, parseInt(req.query.page as string)) : 1;
       const limit = req.query.limit ? Math.min(100, Math.max(1, parseInt(req.query.limit as string))) : 20; // Default 20, max 100
-      const offset = (page - 1) * limit;
 
-      // Get clients with pagination
-      const [clients, total] = await Promise.all([
-        prisma.client.findMany({
-          where,
-          select: {
-            id: true,
-            name: true,
-            organisationName: true,
-            tenantId: true,
-            email: true,
-            phone: true,
-            resellerId: true,
-            resellerName: true,
-            status: true,
-            createdAt: true,
-            tenant: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-            _count: {
-              select: {
-                bookings: true,
-              },
+      // Get all clients matching base filters (without status filter, we'll filter after)
+      const allClients = await prisma.client.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          organisationName: true,
+          tenantId: true,
+          email: true,
+          phone: true,
+          resellerId: true,
+          resellerName: true,
+          status: true,
+          createdAt: true,
+          tenant: {
+            select: {
+              id: true,
+              name: true,
             },
           },
-          orderBy: { name: 'asc' },
-          take: limit,
-          skip: offset,
-        }),
-        prisma.client.count({ where }),
-      ]);
+          _count: {
+            select: {
+              bookings: true,
+            },
+          },
+        },
+        orderBy: { name: 'asc' },
+      });
 
-      // Fetch user status for each client (linked by email)
-      const clientEmails = clients.map(c => c.email).filter((email): email is string => !!email);
+      // Fetch user status for all clients (linked by email)
+      const clientEmails = allClients.map(c => c.email).filter((email): email is string => !!email);
       const users = await prisma.user.findMany({
         where: {
           email: { in: clientEmails },
@@ -103,8 +95,8 @@ router.get(
       // Create a map of email to user status
       const userStatusMap = new Map(users.map(u => [u.email, { status: u.status, userId: u.id }]));
 
-      // Transform clients to match frontend interface
-      const transformedClients = clients.map(client => {
+      // Transform clients and calculate display status
+      let transformedClients = allClients.map(client => {
         const userInfo = client.email ? userStatusMap.get(client.email) : null;
         // User status takes precedence - if user is pending, show pending even if client.status is active
         const displayStatus = userInfo?.status === 'pending' ? 'pending' : client.status;
@@ -129,6 +121,19 @@ router.get(
           totalValue: 0, // TODO: Calculate from bookings/jobs
         };
       });
+
+      // Filter by status if provided (now using display status)
+      if (req.query.status) {
+        const statusFilter = req.query.status as string;
+        transformedClients = transformedClients.filter(client => client.status === statusFilter);
+      }
+
+      // Calculate total after filtering
+      const total = transformedClients.length;
+
+      // Apply pagination after filtering
+      const offset = (page - 1) * limit;
+      transformedClients = transformedClients.slice(offset, offset + limit);
 
       return res.json({
         success: true,

@@ -1,6 +1,6 @@
 import { UserRepository } from '../repositories/user.repository';
 import { TenantRepository } from '../repositories/tenant.repository';
-import { hashPassword, comparePassword } from '../utils/password';
+import { hashPassword, comparePassword, validatePasswordStrength } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { ValidationError, NotFoundError, UnauthorizedError } from '../utils/errors';
 import { UserRole } from '../types';
@@ -73,10 +73,8 @@ export class AuthService {
       throw new ValidationError('Invalid email format');
     }
 
-    // Validate password strength
-    if (data.password.length < 8) {
-      throw new ValidationError('Password must be at least 8 characters long');
-    }
+    // Validate password strength (same requirements as change password)
+    validatePasswordStrength(data.password);
 
     // Check if user already exists
     const existingUser = await userRepo.findByEmail(data.email);
@@ -262,21 +260,7 @@ export class AuthService {
     }
 
     // Validate new password strength
-    if (newPassword.length < 8) {
-      throw new ValidationError('Password must be at least 8 characters long');
-    }
-
-    if (!/[A-Z]/.test(newPassword)) {
-      throw new ValidationError('Password must contain at least one uppercase letter');
-    }
-
-    if (!/[a-z]/.test(newPassword)) {
-      throw new ValidationError('Password must contain at least one lowercase letter');
-    }
-
-    if (!/\d/.test(newPassword)) {
-      throw new ValidationError('Password must contain at least one number');
-    }
+    validatePasswordStrength(newPassword);
 
     // Hash new password
     const hashedPassword = await hashPassword(newPassword);

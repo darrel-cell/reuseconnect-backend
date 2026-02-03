@@ -2,6 +2,24 @@ import { Request, Response, NextFunction } from 'express';
 import { InviteService } from '../services/invite.service';
 import { AuthenticatedRequest, ApiResponse } from '../types';
 import prisma from '../config/database';
+import { validatedConfig } from '../config/env-validation';
+import { generateCsrfToken } from '../middleware/csrf';
+
+/**
+ * Set httpOnly cookie with JWT token (same as in auth.controller)
+ */
+function setAuthCookie(res: Response, token: string) {
+  const isProduction = validatedConfig.nodeEnv === 'production';
+  const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+  
+  res.cookie('auth_token', token, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'strict',
+    maxAge: maxAge,
+    path: '/',
+  });
+}
 
 const inviteService = new InviteService();
 
@@ -123,9 +141,21 @@ export class InviteController {
         password,
       });
 
+      // Set httpOnly cookie with token (secure)
+      setAuthCookie(res, result.token);
+
+      // Generate and return CSRF token for subsequent requests
+      const csrfToken = generateCsrfToken(req, res);
+
+      // Return user and tenant data (but NOT the token in response body)
       return res.status(201).json({
         success: true,
-        data: result,
+        data: {
+          user: result.user,
+          tenant: result.tenant,
+          csrfToken: csrfToken, // Include CSRF token in response
+          // Token is now in httpOnly cookie, not in response
+        },
       } as ApiResponse);
     } catch (error) {
       return next(error);

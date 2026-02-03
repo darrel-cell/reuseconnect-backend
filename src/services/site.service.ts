@@ -33,7 +33,7 @@ export class SiteService {
    */
   async getSites(userId: string, tenantId: string, userRole: string, clientId?: string) {
     try {
-      const where: any = { tenantId };
+      const where: any = {};
 
       // If user is a client, only show their sites
       if (userRole === 'client') {
@@ -62,7 +62,8 @@ export class SiteService {
           return [];
         }
       } else if (userRole === 'reseller') {
-        // Resellers see sites of their clients
+        // Resellers see sites of their clients (within their tenant)
+        where.tenantId = tenantId;
         const resellerClients = await prisma.client.findMany({
           where: {
             tenantId,
@@ -79,11 +80,12 @@ export class SiteService {
           return [];
         }
       } else if (userRole === 'admin') {
-        // Admins see all sites
+        // Admins see all sites across all tenants
         // If clientId is provided, filter by it
         if (clientId) {
           where.clientId = clientId;
         }
+        // No tenantId filter for admins - they see all sites
       }
 
       const sites = await prisma.site.findMany({
@@ -134,13 +136,21 @@ export class SiteService {
         throw new NotFoundError('Site', siteId);
       }
 
-      // Check permissions
-      if (site.tenantId !== tenantId) {
-        throw new ValidationError('Access denied to this site');
-      }
-
-      // If user is a client, verify they own this site
-      if (userRole === 'client') {
+      // Check permissions based on user role
+      if (userRole === 'admin') {
+        // Admins can access sites in any tenant - no restriction
+      } else if (userRole === 'reseller') {
+        // Resellers can only access sites in their own tenant
+        if (site.tenantId !== tenantId) {
+          throw new ValidationError('Access denied to this site');
+        }
+      } else if (userRole === 'client') {
+        // Clients can only access sites in their own tenant and their own sites
+        if (site.tenantId !== tenantId) {
+          throw new ValidationError('Access denied to this site');
+        }
+        
+        // Verify they own this site
         const user = await prisma.user.findUnique({
           where: { id: userId },
           select: { email: true, tenantId: true },
@@ -228,7 +238,7 @@ export class SiteService {
         throw new ValidationError('clientId is required');
       }
 
-      // Verify client exists and belongs to tenant
+      // Verify client exists
       const client = await prisma.client.findUnique({
         where: { id: clientId },
       });
@@ -237,15 +247,34 @@ export class SiteService {
         throw new NotFoundError('Client', clientId);
       }
 
-      if (client.tenantId !== tenantId) {
-        throw new ValidationError('Client does not belong to this tenant');
+      // Determine the correct tenantId for the site
+      // - For admins: use the client's tenantId (admins can create sites for clients in any tenant)
+      // - For resellers: use their own tenantId (resellers can only create sites for clients in their tenant)
+      // - For clients: use their own tenantId (clients can only create sites for themselves)
+      let siteTenantId = tenantId;
+      
+      if (userRole === 'admin') {
+        // Admins can create sites for clients in any tenant - use the client's tenantId
+        siteTenantId = client.tenantId;
+      } else if (userRole === 'reseller') {
+        // Resellers can only create sites for clients in their own tenant
+        if (client.tenantId !== tenantId) {
+          throw new ValidationError('Client does not belong to this tenant');
+        }
+        siteTenantId = tenantId;
+      } else if (userRole === 'client') {
+        // Clients can only create sites for themselves (clientId was auto-determined above)
+        if (client.tenantId !== tenantId) {
+          throw new ValidationError('Client does not belong to this tenant');
+        }
+        siteTenantId = tenantId;
       }
 
       // Create site
       const site = await prisma.site.create({
         data: {
           clientId,
-          tenantId,
+          tenantId: siteTenantId, // Use the determined tenantId
           name: data.name,
           address: data.address,
           postcode: data.postcode,

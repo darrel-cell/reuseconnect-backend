@@ -1,10 +1,11 @@
 import { Response, NextFunction } from 'express';
-import { verifyToken, extractTokenFromHeader } from '../utils/jwt';
+import { verifyToken, extractTokenFromRequest } from '../utils/jwt';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors';
 import { AuthenticatedRequest, UserRole } from '../types';
 
 /**
  * Middleware to authenticate JWT token
+ * Now reads from httpOnly cookie (secure) with fallback to Authorization header
  */
 export function authenticate(
   req: AuthenticatedRequest,
@@ -12,7 +13,7 @@ export function authenticate(
   next: NextFunction
 ) {
   try {
-    const token = extractTokenFromHeader(req.headers.authorization);
+    const token = extractTokenFromRequest(req);
     
     if (!token) {
       throw new UnauthorizedError('No token provided');

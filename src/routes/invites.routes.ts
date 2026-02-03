@@ -48,7 +48,11 @@ router.post(
     body('inviteToken').notEmpty().withMessage('Invite token is required'),
     body('email').isEmail().withMessage('Valid email is required'),
     body('name').notEmpty().withMessage('Name is required'),
-    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+    body('password')
+      .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+      .matches(/[A-Z]/).withMessage('Password must contain at least one uppercase letter')
+      .matches(/[a-z]/).withMessage('Password must contain at least one lowercase letter')
+      .matches(/\d/).withMessage('Password must contain at least one number'),
   ]),
   inviteController.acceptInvite.bind(inviteController)
 );

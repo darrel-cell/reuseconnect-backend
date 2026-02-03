@@ -144,17 +144,9 @@ router.patch(
       }
 
       const { id } = req.params;
-      const { isActive } = req.body;
+      const { status, isActive } = req.body;
 
-      // Validate input
-      if (typeof isActive !== 'boolean') {
-        return res.status(400).json({
-          success: false,
-          error: 'isActive must be a boolean',
-        } as ApiResponse);
-      }
-
-      // Check if user exists
+      // Check if user exists first
       const user = await prisma.user.findUnique({
         where: { id },
         include: {
@@ -169,24 +161,39 @@ router.patch(
         } as ApiResponse);
       }
 
+      // Support both 'status' (string) and 'isActive' (boolean) for backward compatibility
+      let newStatus: 'pending' | 'active' | 'inactive';
+      
+      if (status) {
+        // If status is provided directly, validate and use it
+        if (!['pending', 'active', 'inactive'].includes(status)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid status. Must be one of: pending, active, inactive',
+          } as ApiResponse);
+        }
+        newStatus = status;
+      } else if (typeof isActive === 'boolean') {
+        // Legacy support: convert isActive boolean to status
+        if (isActive) {
+          newStatus = 'active';
+        } else {
+          // For deactivation: if pending, keep pending; otherwise set to inactive
+          newStatus = user.status === 'pending' ? 'pending' : 'inactive';
+        }
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: 'Either "status" (pending|active|inactive) or "isActive" (boolean) must be provided',
+        } as ApiResponse);
+      }
+
       // Prevent admin from deactivating themselves
-      if (id === req.user.userId && !isActive) {
+      if (id === req.user.userId && newStatus !== 'active') {
         return res.status(403).json({
           success: false,
           error: 'You cannot deactivate your own account',
         } as ApiResponse);
-      }
-
-      // Determine new status
-      // If activating, set to 'active' (pending users should be approved separately)
-      // If deactivating, set to 'inactive' (unless currently 'pending', then keep as 'pending')
-      let newStatus: 'pending' | 'active' | 'inactive';
-      if (isActive) {
-        // Activating: set to active (pending users will be handled by approve endpoint)
-        newStatus = 'active';
-      } else {
-        // Deactivating: if pending, keep pending; otherwise set to inactive
-        newStatus = user.status === 'pending' ? 'pending' : 'inactive';
       }
 
       // Update user status

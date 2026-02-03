@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import { hashPassword } from '../utils/password';
+import { hashPassword, validatePasswordStrength } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { BadRequestError, NotFoundError } from '../utils/errors';
 import { emailService } from '../utils/email';
@@ -215,6 +215,9 @@ export class InviteService {
     if (invite.acceptedAt) {
       throw new BadRequestError('This invitation has already been accepted');
     }
+
+    // Validate password strength (same requirements as signup and change password)
+    validatePasswordStrength(password);
 
     // Hash password
     const hashedPassword = await hashPassword(password);

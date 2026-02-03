@@ -2,6 +2,7 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import { v4 as uuidv4 } from 'uuid';
 import { errorHandler } from './utils/errors';
 import { logger } from './utils/logger';
@@ -57,7 +58,8 @@ app.use(cors({
   origin: validatedConfig.cors.origin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+  exposedHeaders: ['X-CSRF-Token'],
 }));
 
 // Request ID middleware - must be early in the chain
@@ -110,6 +112,9 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Cookie parser middleware (must be before body parsing)
+app.use(cookieParser());
+
 // Body parsing middleware
 app.use(express.json({ limit: '50mb' })); // Increase limit for image uploads
 app.use(express.urlencoded({ extended: true, limit: '50mb' })); // Increase limit for image uploads
@@ -117,6 +122,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' })); // Increase limi
 // Apply rate limiting to API routes
 app.use('/api/', apiLimiter);
 app.use('/api/auth', authLimiter);
+
+// CSRF protection for state-changing operations
+import { csrfProtection } from './middleware/csrf';
+app.use('/api/', csrfProtection);
 
 // Request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
