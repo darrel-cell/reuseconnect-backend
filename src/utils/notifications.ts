@@ -188,8 +188,8 @@ export async function notifyBookingStatusChange(
       type: 'info',
     },
     'collected': {
-      title: 'Booking collected',
-      message: `Booking ${bookingNumber} has been collected`,
+      title: 'Assets collected',
+      message: `Assets from booking ${bookingNumber} have been collected by the driver`,
       type: 'success',
     },
     'sanitised': {

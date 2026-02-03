@@ -518,8 +518,8 @@ model Document {
   filePath    String
   fileSize    Int
   mimeType    String
-  uploadedBy  String
-  uploader    User     @relation(fields: [uploadedBy], references: [id])
+  uploadedBy  String?  // Nullable to preserve documents when user is deleted
+  uploader    User?     @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
   metadata    String?  // JSON metadata
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

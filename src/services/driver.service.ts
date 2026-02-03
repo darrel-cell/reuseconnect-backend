@@ -349,6 +349,21 @@ export class DriverService {
       });
     }
 
+    // Check if driver has uploaded documents
+    // Documents must be preserved for audit purposes - set uploadedBy to null instead of deleting
+    const documentCount = await prisma.document.count({
+      where: { uploadedBy: userId },
+    });
+
+    if (documentCount > 0) {
+      // Preserve documents by setting uploadedBy to null (documents are important for audit)
+      // Note: This requires the schema to allow null for uploadedBy field
+      await prisma.document.updateMany({
+        where: { uploadedBy: userId },
+        data: { uploadedBy: null },
+      });
+    }
+
     // Delete driver profile if it exists
     if (driver.driverProfile) {
       await driverRepo.deleteProfile(userId);
