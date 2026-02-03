@@ -42,14 +42,48 @@ declare global {
 }
 
 // Security middleware - Helmet
+// Configured with strict CSP and additional security headers
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      // Removed 'unsafe-inline' from styleSrc for better XSS protection
+      // If inline styles are needed, use nonces or hashes instead
+      styleSrc: ["'self'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:"],
+      // Allow fonts from self and common CDNs
+      fontSrc: ["'self'", "https:", "data:"],
+      // Allow connections to self and HTTPS endpoints
+      connectSrc: ["'self'", "https:"],
+      // Allow object embedding (for PDFs, etc.)
+      objectSrc: ["'none'"],
+      // Allow base URI
+      baseUri: ["'self'"],
+      // Disable form actions to prevent form-based attacks
+      formAction: ["'self'"],
+      // Frame ancestors (X-Frame-Options equivalent)
+      frameAncestors: ["'self'"],
     },
+  },
+  // Enable HSTS (HTTP Strict Transport Security)
+  // Only enable in production to avoid issues in development
+  hsts: validatedConfig.nodeEnv === 'production' ? {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true,
+  } : false,
+  // Explicitly set X-Frame-Options (redundant with CSP frameAncestors, but explicit)
+  frameguard: {
+    action: 'sameorigin',
+  },
+  // X-Content-Type-Options: prevent MIME type sniffing
+  noSniff: true,
+  // X-XSS-Protection (legacy, but still useful for older browsers)
+  xssFilter: true,
+  // Referrer Policy
+  referrerPolicy: {
+    policy: 'strict-origin-when-cross-origin',
   },
   crossOriginEmbedderPolicy: false, // Allow embedding for PDFs
 }));

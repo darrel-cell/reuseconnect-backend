@@ -2,6 +2,7 @@
 import winston from 'winston';
 import path from 'path';
 import fs from 'fs';
+import { sanitizeLogData } from './log-sanitizer';
 
 // Ensure logs directory exists
 const logsDir = path.join(process.cwd(), 'logs');
@@ -75,24 +76,87 @@ if (process.env.NODE_ENV !== 'production') {
   }));
 }
 
-// Helper functions for structured logging
+// Helper functions for structured logging with PII sanitization
 export const logInfo = (message: string, meta?: Record<string, any>) => {
-  logger.info(message, meta);
+  logger.info(message, meta ? sanitizeLogData(meta) : undefined);
 };
 
 export const logError = (message: string, error?: Error | any, meta?: Record<string, any>) => {
-  logger.error(message, {
+  logger.error(message, sanitizeLogData({
     ...meta,
     error: error?.message,
     stack: error?.stack,
-  });
+  }));
 };
 
 export const logWarn = (message: string, meta?: Record<string, any>) => {
-  logger.warn(message, meta);
+  logger.warn(message, meta ? sanitizeLogData(meta) : undefined);
 };
 
 export const logDebug = (message: string, meta?: Record<string, any>) => {
-  logger.debug(message, meta);
+  logger.debug(message, meta ? sanitizeLogData(meta) : undefined);
+};
+
+// Override logger methods to automatically sanitize PII
+// Winston logger methods can be called with: (message, meta) or (meta) or (message)
+const originalInfo = logger.info.bind(logger);
+const originalError = logger.error.bind(logger);
+const originalWarn = logger.warn.bind(logger);
+const originalDebug = logger.debug.bind(logger);
+
+logger.info = (messageOrMeta: any, ...args: any[]) => {
+  if (typeof messageOrMeta === 'string') {
+    // Format: logger.info(message, meta)
+    if (args.length > 0 && typeof args[0] === 'object' && args[0] !== null) {
+      return originalInfo(messageOrMeta, sanitizeLogData(args[0]), ...args.slice(1));
+    }
+    return originalInfo(messageOrMeta, ...args);
+  } else if (typeof messageOrMeta === 'object' && messageOrMeta !== null) {
+    // Format: logger.info(meta)
+    return originalInfo(sanitizeLogData(messageOrMeta), ...args);
+  }
+  return originalInfo(messageOrMeta, ...args);
+};
+
+logger.error = (messageOrMeta: any, ...args: any[]) => {
+  if (typeof messageOrMeta === 'string') {
+    // Format: logger.error(message, meta)
+    if (args.length > 0 && typeof args[0] === 'object' && args[0] !== null) {
+      return originalError(messageOrMeta, sanitizeLogData(args[0]), ...args.slice(1));
+    }
+    return originalError(messageOrMeta, ...args);
+  } else if (typeof messageOrMeta === 'object' && messageOrMeta !== null) {
+    // Format: logger.error(meta)
+    return originalError(sanitizeLogData(messageOrMeta), ...args);
+  }
+  return originalError(messageOrMeta, ...args);
+};
+
+logger.warn = (messageOrMeta: any, ...args: any[]) => {
+  if (typeof messageOrMeta === 'string') {
+    // Format: logger.warn(message, meta)
+    if (args.length > 0 && typeof args[0] === 'object' && args[0] !== null) {
+      return originalWarn(messageOrMeta, sanitizeLogData(args[0]), ...args.slice(1));
+    }
+    return originalWarn(messageOrMeta, ...args);
+  } else if (typeof messageOrMeta === 'object' && messageOrMeta !== null) {
+    // Format: logger.warn(meta)
+    return originalWarn(sanitizeLogData(messageOrMeta), ...args);
+  }
+  return originalWarn(messageOrMeta, ...args);
+};
+
+logger.debug = (messageOrMeta: any, ...args: any[]) => {
+  if (typeof messageOrMeta === 'string') {
+    // Format: logger.debug(message, meta)
+    if (args.length > 0 && typeof args[0] === 'object' && args[0] !== null) {
+      return originalDebug(messageOrMeta, sanitizeLogData(args[0]), ...args.slice(1));
+    }
+    return originalDebug(messageOrMeta, ...args);
+  } else if (typeof messageOrMeta === 'object' && messageOrMeta !== null) {
+    // Format: logger.debug(meta)
+    return originalDebug(sanitizeLogData(messageOrMeta), ...args);
+  }
+  return originalDebug(messageOrMeta, ...args);
 };
 

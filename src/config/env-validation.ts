@@ -17,7 +17,11 @@ const envSchema = z.object({
   DATABASE_URL_PROD: z.string().url('DATABASE_URL_PROD must be a valid URL').optional(),
   
   // JWT
-  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+  // JWT_SECRET: Minimum 32 characters (cryptographically secure), maximum 512 characters (performance limit)
+  // Recommended: 64-256 characters for optimal security and performance
+  JWT_SECRET: z.string()
+    .min(32, 'JWT_SECRET must be at least 32 characters for security')
+    .max(512, 'JWT_SECRET must not exceed 512 characters (performance limit)'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   
   // File Upload
