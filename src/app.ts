@@ -117,8 +117,10 @@ const authLimiter = rateLimit({
 app.use(cookieParser());
 
 // Body parsing middleware
-app.use(express.json({ limit: '50mb' })); // Increase limit for image uploads
-app.use(express.urlencoded({ extended: true, limit: '50mb' })); // Increase limit for image uploads
+// Limit set to 20MB to account for base64 encoding overhead (~33% larger than binary)
+// Actual file size limit is 15MB before compression
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 // Apply rate limiting to API routes
 app.use('/api/', apiLimiter);

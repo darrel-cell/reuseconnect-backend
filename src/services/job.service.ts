@@ -1100,9 +1100,41 @@ export class JobService {
       throw new ValidationError('Evidence must include at least one photo or a customer signature. Cannot create empty evidence records.');
     }
 
+    // Compress images before uploading/saving
+    const { compressBase64Image, PHOTO_COMPRESSION_OPTIONS, SIGNATURE_COMPRESSION_OPTIONS } = await import('../utils/image-compression');
+    
+    // Compress photos
+    let compressedPhotos: string[] = [];
+    try {
+      compressedPhotos = await Promise.all(
+        photos.map(async (photo) => {
+          // Only compress if it's a base64 data URL (new upload)
+          if (photo.startsWith('data:')) {
+            return await compressBase64Image(photo, PHOTO_COMPRESSION_OPTIONS);
+          }
+          // If already S3 URL or other format, return as-is
+          return photo;
+        })
+      );
+    } catch (error) {
+      logger.warn('Failed to compress some photos, using originals', { error });
+      compressedPhotos = photos; // Fallback to originals
+    }
+
+    // Compress signature
+    let compressedSignature: string | null = signature;
+    if (signature && signature.startsWith('data:')) {
+      try {
+        compressedSignature = await compressBase64Image(signature, SIGNATURE_COMPRESSION_OPTIONS);
+      } catch (error) {
+        logger.warn('Failed to compress signature, using original', { error });
+        // Keep original if compression fails
+      }
+    }
+
     // Upload photos and signature to S3 if enabled, otherwise keep as base64
-    let uploadedPhotos: string[] = photos;
-    let uploadedSignature: string | null = signature;
+    let uploadedPhotos: string[] = compressedPhotos;
+    let uploadedSignature: string | null = compressedSignature;
 
     const { uploadToS3, isS3Enabled } = await import('../utils/s3-storage');
     if (isS3Enabled()) {
@@ -1116,9 +1148,9 @@ export class JobService {
         };
 
         // Upload photos to S3 (only if they're base64, skip if already S3 URLs)
-        if (photos.length > 0) {
+        if (compressedPhotos.length > 0) {
           const photoUploads = await Promise.all(
-            photos.map(async (photo, index) => {
+            compressedPhotos.map(async (photo, index) => {
               // Skip upload if already an S3 URL/key
               if (isS3Url(photo)) {
                 return photo;
@@ -1150,17 +1182,17 @@ export class JobService {
         }
 
         // Upload signature to S3 (only if it's base64, skip if already S3 URL)
-        if (signature) {
+        if (compressedSignature) {
           // Skip upload if already an S3 URL/key
-          if (!isS3Url(signature)) {
+          if (!isS3Url(compressedSignature)) {
             // Only upload if it's a base64 data URL
-            if (signature.startsWith('data:')) {
-              const mimeMatch = signature.match(/data:([^;]+);base64,/);
+            if (compressedSignature.startsWith('data:')) {
+              const mimeMatch = compressedSignature.match(/data:([^;]+);base64,/);
               const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
               const ext = mimeType === 'image/png' ? 'png' : 'jpg';
               
               const signatureUpload = await uploadToS3({
-                file: signature,
+                file: compressedSignature,
                 fileName: `${job.id}-signature.${ext}`,
                 folder: 'evidence/signatures',
                 contentType: mimeType,
@@ -1178,9 +1210,9 @@ export class JobService {
           error,
           jobId: job.id,
         });
-        // Fallback to original values if S3 upload fails
-        uploadedPhotos = photos;
-        uploadedSignature = signature;
+        // Fallback to compressed values if S3 upload fails (still use compressed versions)
+        uploadedPhotos = compressedPhotos;
+        uploadedSignature = compressedSignature;
       }
     }
 
