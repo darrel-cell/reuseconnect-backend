@@ -199,11 +199,17 @@ router.patch(
       // Update user status
       const updatedUser = await prisma.user.update({
         where: { id },
-        data: { status: newStatus },
+        data: { status: newStatus as any }, // Cast to any to allow 'declined' status
         include: {
           tenant: true,
         },
-      });
+      }) as any; // Cast result to any to access tenant property
+
+      // Fetch tenant name
+      const tenantName = updatedUser.tenant?.name || (await prisma.tenant.findUnique({
+        where: { id: updatedUser.tenantId },
+        select: { name: true },
+      }))?.name || '';
 
       // Transform user to match frontend ExtendedUser interface
       const transformedUser = {
@@ -213,7 +219,7 @@ router.patch(
         role: updatedUser.role,
         status: updatedUser.status,
         tenantId: updatedUser.tenantId,
-        tenantName: updatedUser.tenant?.name || '',
+        tenantName,
         avatar: updatedUser.avatar || undefined,
         createdAt: updatedUser.createdAt.toISOString(),
         isActive: updatedUser.status === 'active',
@@ -263,21 +269,28 @@ router.patch(
 
       // Only approve if status is pending or declined
       // Declined users can be approved (treated as a new signup approval)
-      if (user.status !== 'pending' && user.status !== 'declined') {
+      const currentStatus = user.status as string;
+      if (currentStatus !== 'pending' && currentStatus !== 'declined') {
         return res.status(400).json({
           success: false,
-          error: `User cannot be approved. Current status: ${user.status || 'unknown'}. Only pending or declined users can be approved.`,
+          error: `User cannot be approved. Current status: ${currentStatus || 'unknown'}. Only pending or declined users can be approved.`,
         } as ApiResponse);
       }
 
       // Update user status to active
       const updatedUser = await prisma.user.update({
         where: { id },
-        data: { status: 'active' },
+        data: { status: 'active' as any },
         include: {
           tenant: true,
         },
-      });
+      }) as any; // Cast result to any to access tenant property
+
+      // Fetch tenant name
+      const tenantName = updatedUser.tenant?.name || (await prisma.tenant.findUnique({
+        where: { id: updatedUser.tenantId },
+        select: { name: true },
+      }))?.name || '';
 
       // Transform user to match frontend ExtendedUser interface
       const transformedUser = {
@@ -287,7 +300,7 @@ router.patch(
         role: updatedUser.role,
         status: updatedUser.status,
         tenantId: updatedUser.tenantId,
-        tenantName: updatedUser.tenant?.name || '',
+        tenantName,
         avatar: updatedUser.avatar || undefined,
         createdAt: updatedUser.createdAt.toISOString(),
         isActive: updatedUser.status === 'active',
@@ -346,11 +359,17 @@ router.patch(
       // Update user status to declined (rejected signup request)
       const updatedUser = await prisma.user.update({
         where: { id },
-        data: { status: 'declined' },
+        data: { status: 'declined' as any }, // Cast to any to allow 'declined' status
         include: {
           tenant: true,
         },
-      });
+      }) as any; // Cast result to any to access tenant property
+
+      // Fetch tenant name
+      const tenantName = updatedUser.tenant?.name || (await prisma.tenant.findUnique({
+        where: { id: updatedUser.tenantId },
+        select: { name: true },
+      }))?.name || '';
 
       // Transform user to match frontend ExtendedUser interface
       const transformedUser = {
@@ -360,7 +379,7 @@ router.patch(
         role: updatedUser.role,
         status: updatedUser.status,
         tenantId: updatedUser.tenantId,
-        tenantName: updatedUser.tenant?.name || '',
+        tenantName,
         avatar: updatedUser.avatar || undefined,
         createdAt: updatedUser.createdAt.toISOString(),
         isActive: updatedUser.status === 'active',

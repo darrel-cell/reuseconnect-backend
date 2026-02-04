@@ -26,7 +26,7 @@ export class UserRepository {
     avatar?: string;
   }) {
     return prisma.user.create({
-      data,
+      data: data as any, // Cast to any to allow 'declined' status
       include: { tenant: true },
     });
   }
@@ -39,7 +39,7 @@ export class UserRepository {
   }) {
     return prisma.user.update({
       where: { id },
-      data,
+      data: data as any, // Cast to any to allow 'declined' status
       include: { tenant: true },
     });
   }

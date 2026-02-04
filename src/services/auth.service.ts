@@ -25,7 +25,8 @@ export class AuthService {
 
     // Block login for inactive, declined, or pending users
     if (user.status !== 'active') {
-      if (user.status === 'declined') {
+      const userStatus = user.status as string;
+      if (userStatus === 'declined') {
         throw new UnauthorizedError('Your signup request has been declined. Please contact support.');
       }
       if (user.status === 'pending') {
