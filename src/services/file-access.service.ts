@@ -3,7 +3,6 @@ import { AuthenticatedRequest } from '../types';
 import { AppError } from '../utils/errors';
 import prisma from '../config/database';
 import path from 'path';
-import fs from 'fs';
 
 export class FileAccessService {
   /**
@@ -14,7 +13,7 @@ export class FileAccessService {
    */
   async checkFileAccess(filePath: string, user: AuthenticatedRequest['user']): Promise<boolean> {
     if (!user) {
-      throw new AppError('Unauthorized', 401);
+      throw new AppError(401, 'Unauthorized');
     }
 
     // Normalize file path - remove leading slash and handle different formats
@@ -29,7 +28,7 @@ export class FileAccessService {
       relativePath = normalizedPath.substring(1); // Remove leading slash
     } else {
       // If path doesn't start with uploads/, it's invalid
-      throw new AppError('Invalid file path', 400);
+      throw new AppError(400, 'Invalid file path');
     }
 
     // Admin can access all files
@@ -85,7 +84,7 @@ export class FileAccessService {
       if (user.role === 'reseller') {
         // Reseller can access files from their tenant
         if (document.tenantId !== user.tenantId) {
-          throw new AppError('Access denied: File belongs to a different tenant', 403);
+          throw new AppError(403, 'Access denied: File belongs to a different tenant');
         }
         return true;
       }
@@ -93,7 +92,7 @@ export class FileAccessService {
       if (user.role === 'client') {
         // Client can only access files from their own bookings
         if (document.tenantId !== user.tenantId) {
-          throw new AppError('Access denied: File belongs to a different tenant', 403);
+          throw new AppError(403, 'Access denied: File belongs to a different tenant');
         }
         
         // If file is linked to a booking, check if client created it
@@ -104,7 +103,7 @@ export class FileAccessService {
           });
           
           if (booking && booking.createdBy !== user.userId) {
-            throw new AppError('Access denied: File belongs to a different client', 403);
+            throw new AppError(403, 'Access denied: File belongs to a different client');
           }
         }
         
@@ -130,11 +129,11 @@ export class FileAccessService {
             }
           }
         }
-        throw new AppError('Access denied: File not associated with your jobs', 403);
+        throw new AppError(403, 'Access denied: File not associated with your jobs');
       }
 
       // Default: deny access
-      throw new AppError('Access denied', 403);
+      throw new AppError(403, 'Access denied');
     }
 
     // Check Evidence table
@@ -184,8 +183,8 @@ export class FileAccessService {
       const signatureMatch = ev.signature && evidenceSearchPaths.some(sp =>
         ev.signature === sp ||
         ev.signature === sp.replace('uploads/', '/uploads/') ||
-        ev.signature.endsWith(fileName) ||
-        ev.signature.includes(fileName)
+        ev.signature!.endsWith(fileName) ||
+        ev.signature!.includes(fileName)
       );
 
       return photoMatch || signatureMatch;
@@ -195,7 +194,7 @@ export class FileAccessService {
       // Check tenant access
       if (user.role === 'reseller') {
         if (evidence.job.tenantId !== user.tenantId) {
-          throw new AppError('Access denied: File belongs to a different tenant', 403);
+          throw new AppError(403, 'Access denied: File belongs to a different tenant');
         }
         return true;
       }
@@ -203,7 +202,7 @@ export class FileAccessService {
       if (user.role === 'client') {
         // Client can access evidence from their bookings
         if (evidence.job.tenantId !== user.tenantId) {
-          throw new AppError('Access denied: File belongs to a different tenant', 403);
+          throw new AppError(403, 'Access denied: File belongs to a different tenant');
         }
         
         if (evidence.job.bookingId) {
@@ -213,7 +212,7 @@ export class FileAccessService {
           });
           
           if (booking && booking.createdBy !== user.userId) {
-            throw new AppError('Access denied: File belongs to a different client', 403);
+            throw new AppError(403, 'Access denied: File belongs to a different client');
           }
         }
         
@@ -229,14 +228,14 @@ export class FileAccessService {
         if (user.tenantId && evidence.job.tenantId === user.tenantId) {
           return true;
         }
-        throw new AppError('Access denied: File not associated with your jobs', 403);
+        throw new AppError(403, 'Access denied: File not associated with your jobs');
       }
 
-      throw new AppError('Access denied', 403);
+      throw new AppError(403, 'Access denied');
     }
 
     // File not found in database - deny access for security
-    throw new AppError('File not found or access denied', 404);
+    throw new AppError(404, 'File not found or access denied');
   }
 
   /**
@@ -268,7 +267,7 @@ export class FileAccessService {
     const resolvedUploadsDir = path.resolve(uploadsDir);
     
     if (!resolvedPath.startsWith(resolvedUploadsDir)) {
-      throw new AppError('Invalid file path: Path traversal detected', 400);
+      throw new AppError(400, 'Invalid file path: Path traversal detected');
     }
 
     return resolvedPath;

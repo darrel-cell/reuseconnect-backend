@@ -73,7 +73,7 @@ export function sanitizeObject<T extends Record<string, any>>(
     return obj;
   }
 
-  const sanitized = { ...obj };
+  const sanitized = { ...obj } as T;
 
   for (const [key, value] of Object.entries(sanitized)) {
     // Skip specified fields (like passwords, emails, tokens)
@@ -82,14 +82,14 @@ export function sanitizeObject<T extends Record<string, any>>(
     }
 
     if (typeof value === 'string') {
-      sanitized[key] = sanitizeInput(value);
+      (sanitized as any)[key] = sanitizeInput(value);
     } else if (Array.isArray(value)) {
-      sanitized[key] = value.map(item => 
+      (sanitized as any)[key] = value.map(item => 
         typeof item === 'string' ? sanitizeInput(item) : item
       );
     } else if (value && typeof value === 'object') {
       // Recursively sanitize nested objects
-      sanitized[key] = sanitizeObject(value, fieldsToSkip);
+      (sanitized as any)[key] = sanitizeObject(value, fieldsToSkip);
     }
   }
 

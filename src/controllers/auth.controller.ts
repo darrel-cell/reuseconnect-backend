@@ -170,7 +170,7 @@ export class AuthController {
     }
   }
 
-  async logout(req: Request, res: Response, next: NextFunction) {
+  async logout(_req: Request, res: Response, next: NextFunction) {
     try {
       // Clear the httpOnly cookie
       clearAuthCookie(res);

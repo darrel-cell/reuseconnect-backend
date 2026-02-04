@@ -40,7 +40,6 @@ export async function compressBase64Image(
       throw new Error('Invalid base64 data URL format');
     }
 
-    const mimeType = matches[1];
     const base64Data = matches[2];
 
     // Convert base64 to buffer

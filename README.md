@@ -2,46 +2,64 @@
 
 Node.js + Express + TypeScript backend for the IT Asset Disposition (ITAD) SaaS workflow platform.
 
+## Overview
+
+This backend provides a RESTful API for managing IT asset disposition workflows, including booking management, job tracking, CO2e calculations, buyback estimates, and ERP integration.
+
 ## Tech Stack
 
-- **Node.js** with **TypeScript**
-- **Express** for REST APIs
-- **PostgreSQL** with **Prisma** ORM
-- **JWT** for authentication
-- **bcryptjs** for password hashing
-- **Multer** for file uploads
-- **PDFKit** for PDF generation
+- **Runtime:** Node.js 20+
+- **Framework:** Express.js
+- **Language:** TypeScript
+- **Database:** PostgreSQL with Prisma ORM
+- **Authentication:** JWT with httpOnly cookies
+- **Security:** Helmet, CSRF protection, rate limiting
+- **File Upload:** Multer with S3 support
+- **PDF Generation:** PDFKit
+- **Logging:** Winston
 
 ## Project Structure
 
 ```
 backend/
 ├── src/
-│   ├── app.ts                 # Express app setup
+│   ├── app.ts                 # Express app configuration
 │   ├── server.ts              # Server entry point
-│   ├── config/               # Configuration
+│   ├── config/                # Configuration
 │   │   ├── database.ts       # Prisma client
-│   │   └── env.ts            # Environment config
-│   ├── routes/               # API routes
+│   │   ├── env.ts            # Environment config
+│   │   └── env-validation.ts # Environment validation
+│   ├── routes/               # API route definitions
 │   ├── controllers/          # Request handlers
 │   ├── services/             # Business logic
 │   ├── repositories/         # Data access layer
 │   ├── middleware/           # Express middleware
 │   │   ├── auth.ts          # Authentication & authorization
+│   │   ├── csrf.ts          # CSRF protection
 │   │   ├── validator.ts     # Request validation
 │   │   └── workflow.ts      # Workflow state machine
 │   ├── utils/               # Utility functions
 │   │   ├── errors.ts        # Error handling
 │   │   ├── jwt.ts           # JWT utilities
 │   │   ├── password.ts      # Password hashing
-│   │   └── co2.ts           # CO2 calculations
+│   │   ├── co2.ts           # CO2 calculations
+│   │   └── logger.ts        # Logging utilities
 │   └── types/               # TypeScript types
 ├── prisma/
-│   └── schema.prisma         # Database schema
+│   ├── schema.prisma         # Database schema
+│   └── migrations/          # Database migrations
+├── scripts/                 # Utility scripts
+├── ecosystem.config.js      # PM2 configuration
 └── package.json
 ```
 
-## Setup
+## Prerequisites
+
+- Node.js 20+ and npm
+- PostgreSQL database (local or AWS RDS)
+- AWS S3 bucket (optional, for file storage in production)
+
+## Installation
 
 ### 1. Install Dependencies
 
@@ -49,146 +67,228 @@ backend/
 npm install
 ```
 
-### 2. Database Setup
+### 2. Environment Variables
 
-#### Development (Local PostgreSQL)
-
-1. Create a local PostgreSQL database
-2. Set `DATABASE_URL` in your `.env` file:
+Create a `.env` file in the `backend` directory:
 
 ```env
-NODE_ENV=development
-DATABASE_URL="postgresql://user:password@localhost:5432/itad_db?schema=public"
-```
-
-#### Production (AWS RDS)
-
-1. Set up your AWS RDS PostgreSQL instance
-2. In your production `.env` file, set both `DATABASE_URL` and `DATABASE_URL_PROD`:
-
-```env
+# Server Configuration
 NODE_ENV=production
-# Local database (fallback, optional in production)
-DATABASE_URL="postgresql://user:password@localhost:5432/itad_db?schema=public"
-# RDS database (used automatically in production)
-DATABASE_URL_PROD="postgresql://postgres:password@your-rds-instance.xxxxxxxxx.eu-west-2.rds.amazonaws.com:5432/itaddb?schema=public"
-```
-
-**Note:** The application automatically selects the correct database:
-- **Development**: Uses `DATABASE_URL` (local PostgreSQL)
-- **Production**: Uses `DATABASE_URL_PROD` (RDS) if set, otherwise falls back to `DATABASE_URL`
-
-3. Generate Prisma client and push schema:
-
-```bash
-npm run db:push          # Recommended for development (no shadow DB needed)
-npm run db:generate      # Regenerate Prisma Client
-```
-
-**Note:** Use `db:push` for development to avoid shadow database errors. See `DATABASE_WORKFLOW.md` for details.
-
-For production, use `npx prisma migrate deploy` or continue using `db:push`.
-
-### 3. Environment Variables
-
-Create a `.env` file with:
-
-```env
-# Server
-NODE_ENV=development
 PORT=3000
 
 # Database
-# Development: Local PostgreSQL
 DATABASE_URL="postgresql://user:password@localhost:5432/itad_db?schema=public"
-# Production: AWS RDS (set this when deploying to production)
-# DATABASE_URL_PROD="postgresql://postgres:password@your-rds-instance.xxxxxxxxx.eu-west-2.rds.amazonaws.com:5432/itaddb?schema=public"
+# For production with AWS RDS:
+DATABASE_URL_PROD="postgresql://postgres:password@your-rds-instance.region.rds.amazonaws.com:5432/itaddb?schema=public"
 
-# JWT
-JWT_SECRET="your-super-secret-jwt-key-change-in-production"
+# JWT Authentication
+JWT_SECRET="your-super-secret-jwt-key-minimum-32-characters"
 JWT_EXPIRES_IN="7d"
-
-# Server
-PORT=3000
-NODE_ENV=development
 
 # File Upload
 UPLOAD_DIR="./uploads"
-MAX_FILE_SIZE=52428800  # 50MB in bytes
+MAX_FILE_SIZE=20971520  # 20MB in bytes
 
-# Mock ERP
-MOCK_ERP_ENABLED=true
-ERP_BASE_URL="http://localhost:3001/api/erp"
+# ERP Integration
+MOCK_ERP_ENABLED=false
+ERP_BASE_URL="https://your-erp-api.com/api/erp"
 
 # Warehouse Location (for CO2 calculations)
 WAREHOUSE_POSTCODE="RM13 8BT"
 WAREHOUSE_LAT=51.5174
 WAREHOUSE_LNG=0.1904
 
-# EmailJS (for sending invitation emails)
+# Email Configuration (EmailJS)
 EMAILJS_ENABLED=true
-EMAILJS_SERVICE_ID=service_xxxxx
-EMAILJS_TEMPLATE_ID=template_xxxxx
-EMAILJS_PUBLIC_KEY=xxxxxxxxxxxxx
-EMAILJS_PRIVATE_KEY=xxxxxxxxxxxxx  # Optional but recommended for Node.js/backend
-FRONTEND_URL=http://localhost:5173
-SUPPORT_EMAIL=support@example.com
+EMAILJS_SERVICE_ID=your_service_id
+EMAILJS_TEMPLATE_ID=your_template_id
+EMAILJS_PUBLIC_KEY=your_public_key
+EMAILJS_PRIVATE_KEY=your_private_key
 
-# Note: If EMAILJS_PRIVATE_KEY is not set, you must enable 
-# "API calls for non-browser applications" in EmailJS dashboard
+# Frontend URL
+FRONTEND_URL=https://your-frontend-domain.com
+SUPPORT_EMAIL=support@yourdomain.com
+
+# CORS (optional, defaults to FRONTEND_URL)
+CORS_ORIGIN=https://your-frontend-domain.com
+
+# AWS S3 (optional, for production file storage)
+AWS_REGION=eu-west-2
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+AWS_S3_BUCKET_NAME=your-bucket-name
+USE_S3_STORAGE=true
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000  # 15 minutes
+RATE_LIMIT_MAX_REQUESTS=100
+RATE_LIMIT_AUTH_MAX=5
+
+# OpenRouteService (for route calculations)
+OPENROUTESERVICE_API_KEY=your_api_key
 ```
 
-### 4. Run Development Server
+### 3. Database Setup
+
+#### Generate Prisma Client
+
+```bash
+npm run db:generate
+```
+
+#### Apply Database Schema
+
+For development:
+```bash
+npm run db:push
+```
+
+For production:
+```bash
+npx prisma migrate deploy
+```
+
+#### Open Prisma Studio (Optional)
+
+```bash
+npm run db:studio
+```
+
+## Running the Application
+
+### Development Mode
 
 ```bash
 npm run dev
 ```
 
-The server will start on `http://localhost:3000`
+The server will start on `http://localhost:3000` with hot reload enabled.
+
+### Production Build
+
+```bash
+# Build TypeScript
+npm run build
+
+# Start production server
+npm start
+```
+
+### Using PM2 (Recommended for Production)
+
+```bash
+# Install PM2 globally
+npm install -g pm2
+
+# Start with PM2
+pm2 start ecosystem.config.js
+
+# View logs
+pm2 logs
+
+# Monitor
+pm2 monit
+
+# Stop
+pm2 stop ecosystem.config.js
+```
 
 ## API Endpoints
 
 ### Authentication
-
-- `POST /api/auth/login` - Login
-- `POST /api/auth/signup` - Signup
-- `GET /api/auth/me` - Get current user
+- `POST /api/auth/login` - User login
+- `POST /api/auth/signup` - User registration
+- `GET /api/auth/me` - Get current user (protected)
+- `POST /api/auth/logout` - Logout user (protected)
+- `POST /api/auth/change-password` - Change password (protected)
 
 ### Bookings
-
 - `POST /api/bookings` - Create booking
-- `GET /api/bookings` - List bookings
-- `GET /api/bookings/:id` - Get booking by ID
-- `POST /api/bookings/:id/assign-driver` - Assign driver (admin)
+- `GET /api/bookings` - List bookings (with filters)
+- `GET /api/bookings/:id` - Get booking details
 - `PATCH /api/bookings/:id/status` - Update booking status (admin)
+- `POST /api/bookings/:id/assign-driver` - Assign driver (admin)
 
 ### Jobs
-
-- `GET /api/jobs` - List jobs
-- `GET /api/jobs/:id` - Get job by ID
+- `GET /api/jobs` - List jobs (with filters)
+- `GET /api/jobs/:id` - Get job details
 - `PATCH /api/jobs/:id/status` - Update job status
 - `PATCH /api/jobs/:id/evidence` - Update job evidence (driver)
 
 ### Dashboard
-
 - `GET /api/dashboard/stats` - Get dashboard statistics
 
 ### Asset Categories
-
 - `GET /api/asset-categories` - List asset categories
-- `POST /api/asset-categories` - Create asset category (admin)
+- `POST /api/asset-categories` - Create category (admin)
+- `PATCH /api/asset-categories/:id` - Update category (admin)
+- `DELETE /api/asset-categories/:id` - Delete category (admin)
 
 ### Clients
-
 - `GET /api/clients` - List clients
-- `GET /api/clients/:id` - Get client by ID
+- `GET /api/clients/:id` - Get client details
+- `POST /api/clients` - Create client (admin)
+- `PATCH /api/clients/:id` - Update client (admin)
 
-## Roles
+### Sites
+- `GET /api/sites` - List sites
+- `GET /api/sites/:id` - Get site details
+- `POST /api/sites` - Create site
+- `PATCH /api/sites/:id` - Update site
+- `DELETE /api/sites/:id` - Delete site
 
-- **admin** - Full access, manages workflows
-- **client** - Creates bookings, views own jobs
-- **reseller** - Read-only access to referred clients' jobs
-- **driver** - Mobile PWA user, manages assigned jobs
+### Users
+- `GET /api/users` - List users (admin)
+- `GET /api/users/:id` - Get user details (admin)
+- `PATCH /api/users/:id` - Update user (admin)
+- `PATCH /api/users/:id/status` - Update user status (admin)
+
+### Drivers
+- `GET /api/drivers` - List drivers
+- `GET /api/drivers/:id` - Get driver details
+
+### Invites
+- `POST /api/invites` - Create invite (admin)
+- `GET /api/invites/:token` - Get invite details
+- `POST /api/invites/:token/accept` - Accept invite
+
+### CO2 Calculations
+- `POST /api/co2/calculate` - Calculate CO2e impact
+- `GET /api/co2/job/:jobId` - Get CO2e data for job
+
+### Buyback
+- `POST /api/buyback/calculate` - Calculate buyback estimate
+- `GET /api/buyback/job/:jobId` - Get buyback data for job
+
+### Sanitisation
+- `POST /api/sanitisation/complete` - Complete sanitisation (admin)
+- `GET /api/sanitisation/job/:jobId` - Get sanitisation data
+
+### Grading
+- `POST /api/grading/complete` - Complete grading (admin)
+- `GET /api/grading/job/:jobId` - Get grading data
+
+### Documents
+- `GET /api/documents` - List documents
+- `POST /api/documents` - Upload document
+- `GET /api/documents/:id` - Get document
+- `DELETE /api/documents/:id` - Delete document
+
+### Notifications
+- `GET /api/notifications` - List notifications
+- `PATCH /api/notifications/:id/read` - Mark as read
+- `PATCH /api/notifications/read-all` - Mark all as read
+
+### Organisation Profile
+- `GET /api/organisation-profile` - Get organisation profile
+- `PATCH /api/organisation-profile` - Update organisation profile
+
+## User Roles
+
+- **admin** - Full system access, manages workflows, users, and settings
+- **client** - Creates bookings, views own jobs and reports
+- **reseller** - Manages clients, views referred clients' jobs
+- **driver** - Mobile PWA user, manages assigned jobs and uploads evidence
 
 ## Workflow States
 
@@ -202,37 +302,47 @@ created → scheduled → collected → sanitised → graded → completed
 booked → routed → en_route → arrived → collected → warehouse → sanitised → graded → completed
 ```
 
+## Security Features
+
+- **JWT Authentication** - Tokens stored in httpOnly cookies
+- **CSRF Protection** - Token-based CSRF validation
+- **Password Hashing** - bcryptjs with salt rounds
+- **Rate Limiting** - Request rate limiting per IP
+- **Input Validation** - express-validator for request validation
+- **XSS Protection** - Input sanitization with sanitize-html
+- **Security Headers** - Helmet.js for security headers
+- **CORS** - Configurable CORS policy
+- **File Upload Security** - File type and size validation
+
 ## Database Schema
 
-The database schema is defined in `prisma/schema.prisma`. Key models:
-
-- **User** - Users with roles
-- **Tenant** - Company/brand (single tenant)
+Key models:
+- **User** - System users with roles
+- **Tenant** - Organisation/company (single tenant)
 - **Client** - Clients (can belong to reseller)
-- **Booking** - Initial booking request
-- **Job** - Workflow execution
+- **Site** - Client sites/locations
+- **Booking** - Initial booking requests
+- **Job** - Workflow execution instances
 - **AssetCategory** - Asset types with CO2e values
 - **Evidence** - Driver uploads (photos, signatures)
 - **CO2Result** - CO2 calculation results
 - **BuybackResult** - Buyback estimates and final values
-- **FinanceStatus** - ERP finance tracking
-- **Document** - Manual PDF uploads
+- **Document** - Uploaded documents
 - **Certificate** - Generated certificates
-- **Invoice** - Invoice tracking
-- **Commission** - Reseller commissions
+- **Notification** - User notifications
+- **OrganisationProfile** - Organisation settings
 
-## Mock ERP Integration
+## ERP Integration
 
-The backend includes a Mock ERP service (`src/services/mock-erp.service.ts`) that simulates ERP API calls. This can be replaced with real ERP integration by:
+The backend supports ERP integration for finance tracking. Configure in `.env`:
 
-1. Setting `MOCK_ERP_ENABLED=false` in `.env`
-2. Implementing real ERP client in `mock-erp.service.ts`
-3. Updating `ERP_BASE_URL` to real ERP endpoint
+- Set `MOCK_ERP_ENABLED=false` to use real ERP
+- Set `ERP_BASE_URL` to your ERP API endpoint
+- Implement ERP client in `src/services/mock-erp.service.ts` if needed
 
 ## CO2 Calculation
 
-CO2 calculations are performed using the same logic as the frontend:
-
+CO2 calculations include:
 - Reuse savings based on asset categories
 - Travel emissions based on vehicle type and distance
 - Net impact calculation
@@ -241,44 +351,66 @@ CO2 calculations are performed using the same logic as the frontend:
 ## Error Handling
 
 All errors are handled centrally via `errorHandler` middleware. Custom error classes:
-
 - `ValidationError` - 400 Bad Request
 - `UnauthorizedError` - 401 Unauthorized
 - `ForbiddenError` - 403 Forbidden
 - `NotFoundError` - 404 Not Found
-- `AppError` - Generic application error
+- `AppError` - Generic application error (500)
 
-## Security
+## Logging
 
-- Passwords are hashed using bcryptjs
-- JWT tokens for authentication
-- Role-based authorization middleware
-- Input validation using express-validator
-- CORS enabled for frontend
+Logs are written to:
+- `logs/combined.log` - All logs
+- `logs/error.log` - Error logs only
+- `logs/exceptions.log` - Unhandled exceptions
+- `logs/rejections.log` - Unhandled promise rejections
 
-## Development
+Log levels: `error`, `warn`, `info`, `debug`
+
+## Available Scripts
 
 ```bash
-# Development with hot reload
-npm run dev
+# Development
+npm run dev              # Start development server with hot reload
 
 # Build
-npm run build
+npm run build            # Build TypeScript to JavaScript
 
-# Start production server
-npm start
+# Production
+npm start                # Start production server
 
 # Database
-npm run db:generate  # Generate Prisma client
-npm run db:push      # Push schema to database
-npm run db:migrate   # Run migrations
-npm run db:studio    # Open Prisma Studio
+npm run db:generate      # Generate Prisma Client
+npm run db:push          # Push schema to database (development)
+npm run db:migrate       # Create migration (development)
+npx prisma migrate deploy # Apply migrations (production)
+npm run db:studio        # Open Prisma Studio
+
+# Utilities
+npm run db:cleanup       # Cleanup database
+npm run db:check-categories # Check categories
+npm run db:update-categories # Update categories
 ```
+
+## Production Deployment
+
+1. Set `NODE_ENV=production` in `.env`
+2. Configure production database (RDS)
+3. Set secure `JWT_SECRET` (minimum 32 characters)
+4. Configure S3 for file storage (optional)
+5. Set up reverse proxy (Nginx) with SSL
+6. Use PM2 for process management
+7. Configure log rotation
+8. Set up monitoring and alerts
 
 ## Notes
 
-- This is a single-tenant system (one company, one brand)
+- Single-tenant system (one company, one brand)
 - ERP is external integration only (not used as database)
 - Finance logic (invoices, VAT, payments) is ERP-owned
 - Backend controls workflows, permissions, documents, and business logic
-- No multi-tenancy or white-label features
+- File uploads can use local storage or AWS S3
+
+## Support
+
+For issues or questions, contact: support@yourdomain.com

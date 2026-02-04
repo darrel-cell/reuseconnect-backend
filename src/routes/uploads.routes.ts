@@ -1,5 +1,5 @@
 // Secure File Serving Routes
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { authenticate } from '../middleware/auth';
 import { AuthenticatedRequest } from '../types';
 import { FileAccessService } from '../services/file-access.service';
