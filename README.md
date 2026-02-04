@@ -145,7 +145,7 @@ npm run db:push
 
 For production:
 ```bash
-npx prisma migrate deploy
+npm run db:migrate:deploy
 ```
 
 #### Open Prisma Studio (Optional)
@@ -383,7 +383,7 @@ npm start                # Start production server
 npm run db:generate      # Generate Prisma Client
 npm run db:push          # Push schema to database (development)
 npm run db:migrate       # Create migration (development)
-npx prisma migrate deploy # Apply migrations (production)
+npm run db:migrate:deploy # Apply migrations (production)
 npm run db:studio        # Open Prisma Studio
 
 # Utilities
