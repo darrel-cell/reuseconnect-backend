@@ -360,7 +360,7 @@ export class DriverService {
       // Note: This requires the schema to allow null for uploadedBy field
       await prisma.document.updateMany({
         where: { uploadedBy: userId },
-        data: { uploadedBy: null },
+        data: { uploadedBy: null as any },
       });
     }
 
