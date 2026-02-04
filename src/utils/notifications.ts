@@ -393,10 +393,8 @@ export async function notifyPendingUserApproval(
 ) {
   const roleLabel = userRole === 'client' ? 'Client' : userRole === 'reseller' ? 'Reseller' : userRole;
   
-  // Route clients to /clients page, resellers to /users page
-  const notificationUrl = userRole === 'client' 
-    ? '/clients?status=pending'
-    : '/users?status=pending&role=reseller';
+  // Route all pending user approvals to /users page (where approve/decline functionality is centralized)
+  const notificationUrl = `/users?status=pending${userRole !== 'all' ? `&role=${userRole}` : ''}`;
   
   await createNotificationsForUsers(
     adminUserIds,

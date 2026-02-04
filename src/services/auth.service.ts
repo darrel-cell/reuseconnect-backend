@@ -23,7 +23,14 @@ export class AuthService {
       throw new UnauthorizedError('Invalid email or password');
     }
 
+    // Block login for inactive, declined, or pending users
     if (user.status !== 'active') {
+      if (user.status === 'declined') {
+        throw new UnauthorizedError('Your signup request has been declined. Please contact support.');
+      }
+      if (user.status === 'pending') {
+        throw new UnauthorizedError('Your account is pending approval. Please wait for admin approval.');
+      }
       throw new UnauthorizedError('Account is not active. Please contact support.');
     }
 

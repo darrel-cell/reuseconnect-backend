@@ -162,14 +162,14 @@ router.patch(
       }
 
       // Support both 'status' (string) and 'isActive' (boolean) for backward compatibility
-      let newStatus: 'pending' | 'active' | 'inactive';
+      let newStatus: 'pending' | 'active' | 'inactive' | 'declined';
       
       if (status) {
         // If status is provided directly, validate and use it
-        if (!['pending', 'active', 'inactive'].includes(status)) {
+        if (!['pending', 'active', 'inactive', 'declined'].includes(status)) {
           return res.status(400).json({
             success: false,
-            error: 'Invalid status. Must be one of: pending, active, inactive',
+            error: 'Invalid status. Must be one of: pending, active, inactive, declined',
           } as ApiResponse);
         }
         newStatus = status;
@@ -261,11 +261,12 @@ router.patch(
         } as ApiResponse);
       }
 
-      // Only approve if status is pending
-      if (user.status !== 'pending') {
+      // Only approve if status is pending or declined
+      // Declined users can be approved (treated as a new signup approval)
+      if (user.status !== 'pending' && user.status !== 'declined') {
         return res.status(400).json({
           success: false,
-          error: `User is not in pending status. Current status: ${user.status || 'unknown'}`,
+          error: `User cannot be approved. Current status: ${user.status || 'unknown'}. Only pending or declined users can be approved.`,
         } as ApiResponse);
       }
 
@@ -273,6 +274,79 @@ router.patch(
       const updatedUser = await prisma.user.update({
         where: { id },
         data: { status: 'active' },
+        include: {
+          tenant: true,
+        },
+      });
+
+      // Transform user to match frontend ExtendedUser interface
+      const transformedUser = {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        status: updatedUser.status,
+        tenantId: updatedUser.tenantId,
+        tenantName: updatedUser.tenant?.name || '',
+        avatar: updatedUser.avatar || undefined,
+        createdAt: updatedUser.createdAt.toISOString(),
+        isActive: updatedUser.status === 'active',
+        lastLogin: undefined,
+        invitedBy: undefined,
+      };
+
+      return res.json({
+        success: true,
+        data: transformedUser,
+      } as ApiResponse);
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+// Decline user (change from pending to inactive)
+router.patch(
+  '/:id/decline',
+  authorize('admin'),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized',
+        } as ApiResponse);
+      }
+
+      const { id } = req.params;
+
+      // Check if user exists
+      const user = await prisma.user.findUnique({
+        where: { id },
+        include: {
+          tenant: true,
+        },
+      });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: `User with ID "${id}" was not found.`,
+        } as ApiResponse);
+      }
+
+      // Only decline if status is pending
+      if (user.status !== 'pending') {
+        return res.status(400).json({
+          success: false,
+          error: `User is not in pending status. Current status: ${user.status || 'unknown'}`,
+        } as ApiResponse);
+      }
+
+      // Update user status to declined (rejected signup request)
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: { status: 'declined' },
         include: {
           tenant: true,
         },

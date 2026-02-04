@@ -79,27 +79,100 @@ router.get(
       });
 
       // Fetch user status for all clients (linked by email)
+      // Use case-insensitive email matching to handle any case differences
       const clientEmails = allClients.map(c => c.email).filter((email): email is string => !!email);
+      
+      if (clientEmails.length === 0) {
+        // No clients with emails, skip user lookup
+        const transformedClients = allClients.map(client => ({
+          id: client.id,
+          name: client.name,
+          organisationName: client.organisationName || undefined,
+          tenantId: client.tenantId,
+          tenantName: client.tenant?.name || '',
+          email: client.email || '',
+          contactName: client.name,
+          contactPhone: client.phone || '',
+          resellerId: client.resellerId,
+          resellerName: client.resellerName,
+          status: client.status,
+          createdAt: client.createdAt.toISOString(),
+          totalBookings: client._count.bookings,
+          totalJobs: 0,
+          totalValue: 0,
+        }));
+        
+        // Apply status filter and pagination
+        let filteredClients = transformedClients;
+        if (req.query.status) {
+          filteredClients = filteredClients.filter(c => c.status === req.query.status);
+        }
+        const total = filteredClients.length;
+        const offset = (page - 1) * limit;
+        filteredClients = filteredClients.slice(offset, offset + limit);
+        
+        return res.json({
+          success: true,
+          data: filteredClients,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        } as ApiResponse);
+      }
+      
+      const clientEmailsLower = clientEmails.map(e => e.toLowerCase());
+      
+      // Fetch all client users - for admin, fetch from all tenants; for reseller, only their tenant
+      // This ensures we find users even if they're in different tenants (shouldn't happen, but be safe)
+      const tenantIds = req.user.role === 'admin' 
+        ? undefined // Admin: fetch from all tenants
+        : [...new Set(allClients.map(c => c.tenantId))]; // Reseller: only their tenant
+      
+      const userWhere: any = {
+        role: 'client',
+      };
+      if (tenantIds) {
+        userWhere.tenantId = { in: tenantIds };
+      }
+      
       const users = await prisma.user.findMany({
-        where: {
-          email: { in: clientEmails },
-          role: 'client',
-        },
+        where: userWhere,
         select: {
           email: true,
           status: true,
           id: true,
+          tenantId: true,
         },
       });
 
-      // Create a map of email to user status
-      const userStatusMap = new Map(users.map(u => [u.email, { status: u.status, userId: u.id }]));
+      // Create a map of email to user status (case-insensitive lookup)
+      // Use lowercase email as key for case-insensitive matching
+      // Match users whose email (lowercase) matches one of the client emails
+      const userStatusMap = new Map(
+        users
+          .filter(u => u.email && clientEmailsLower.includes(u.email.toLowerCase()))
+          .map(u => [u.email!.toLowerCase(), { status: u.status, userId: u.id, originalEmail: u.email! }])
+      );
 
       // Transform clients and calculate display status
       let transformedClients = allClients.map(client => {
-        const userInfo = client.email ? userStatusMap.get(client.email) : null;
-        // User status takes precedence - if user is pending, show pending even if client.status is active
-        const displayStatus = userInfo?.status === 'pending' ? 'pending' : client.status;
+        // Use case-insensitive email lookup
+        const userInfo = client.email ? userStatusMap.get(client.email.toLowerCase()) : null;
+        
+        // User status ALWAYS takes precedence - use user.status if user exists, otherwise use client.status
+        // This ensures that when a client user is declined/deactivated in /users page, it reflects in /clients page
+        // Important: 'declined' status from User table MUST override Client.status
+        // If userInfo exists, we MUST use userInfo.status, even if it's 'declined', 'inactive', etc.
+        const displayStatus = userInfo ? userInfo.status : client.status;
+        
+        // Debug: Log if we have a client with email but no user found (potential issue)
+        if (client.email && !userInfo && req.user?.role === 'admin') {
+          // Only log in development/debug mode - this helps identify email matching issues
+          // In production, we'll just use client.status as fallback
+        }
         
         return {
           id: client.id,
@@ -112,7 +185,7 @@ router.get(
           contactPhone: client.phone || '',
           resellerId: client.resellerId,
           resellerName: client.resellerName,
-          status: displayStatus, // Use user status if pending, otherwise client status
+          status: displayStatus as any, // Use user status (includes 'declined') - cast to any to allow UserStatus values
           userStatus: userInfo?.status, // Include user status separately for reference
           userId: userInfo?.userId, // Include userId for approval
           createdAt: client.createdAt.toISOString(),
@@ -205,6 +278,29 @@ router.get(
         }
       }
 
+      // Fetch user status if client has an email (to match user status with client status)
+      // Use case-insensitive email matching
+      let displayStatus: string = client.status;
+      let userId: string | undefined;
+      if (client.email) {
+        const user = await prisma.user.findFirst({
+          where: {
+            email: { equals: client.email, mode: 'insensitive' },
+            role: 'client',
+          },
+          select: {
+            id: true,
+            status: true,
+          },
+        });
+        if (user) {
+          // User status takes precedence - use user.status if user exists, otherwise use client.status
+          // Important: 'declined' status from User table should override Client.status
+          displayStatus = user.status as string; // Cast to string to allow UserStatus values like 'declined'
+          userId = user.id;
+        }
+      }
+
       // Transform client to match frontend interface
       const transformedClient = {
         id: client.id,
@@ -217,7 +313,8 @@ router.get(
         contactPhone: client.phone || '',
         resellerId: client.resellerId,
         resellerName: client.resellerName,
-        status: client.status,
+        status: displayStatus as any, // Use user status (includes 'declined') - cast to allow UserStatus values
+        userId: userId, // Include userId for reference
         createdAt: client.createdAt.toISOString(),
         totalBookings: client._count.bookings,
         totalJobs: 0, // TODO: Calculate from jobs

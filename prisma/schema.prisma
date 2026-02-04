@@ -50,6 +50,7 @@ enum UserStatus {
   pending
   active
   inactive
+  declined
 }
 
 // Tenant (Company/Brand) - Single company, one brand

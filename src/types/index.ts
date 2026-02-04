@@ -2,7 +2,7 @@
 import { Request } from 'express';
 
 export type UserRole = 'admin' | 'client' | 'reseller' | 'driver';
-export type UserStatus = 'pending' | 'active' | 'inactive';
+export type UserStatus = 'pending' | 'active' | 'inactive' | 'declined';
 
 export type BookingStatus = 
   | 'pending'
