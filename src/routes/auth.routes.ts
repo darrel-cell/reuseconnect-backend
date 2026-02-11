@@ -27,7 +27,8 @@ router.post(
       .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
       .matches(/[A-Z]/).withMessage('Password must contain at least one uppercase letter')
       .matches(/[a-z]/).withMessage('Password must contain at least one lowercase letter')
-      .matches(/\d/).withMessage('Password must contain at least one number'),
+      .matches(/\d/).withMessage('Password must contain at least one number')
+      .matches(/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/).withMessage('Password must contain at least one special character'),
     body('name').notEmpty().withMessage('Name is required'),
     body('companyName').notEmpty().withMessage('Company name is required'),
   ]),
@@ -80,7 +81,8 @@ router.post(
       .isLength({ min: 8 }).withMessage('New password must be at least 8 characters')
       .matches(/[A-Z]/).withMessage('Password must contain at least one uppercase letter')
       .matches(/[a-z]/).withMessage('Password must contain at least one lowercase letter')
-      .matches(/\d/).withMessage('Password must contain at least one number'),
+      .matches(/\d/).withMessage('Password must contain at least one number')
+      .matches(/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/).withMessage('Password must contain at least one special character'),
   ]),
   authController.changePassword.bind(authController)
 );

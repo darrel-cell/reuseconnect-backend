@@ -20,6 +20,7 @@ export async function comparePassword(
  * - At least one uppercase letter
  * - At least one lowercase letter
  * - At least one number
+ * - At least one special character (!@#$%^&*()_+-=[]{}|;:,.<>?)
  * 
  * @param password - The password to validate
  * @throws {ValidationError} If password doesn't meet requirements
@@ -39,5 +40,9 @@ export function validatePasswordStrength(password: string): void {
 
   if (!/\d/.test(password)) {
     throw new ValidationError('Password must contain at least one number');
+  }
+
+  if (!/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/.test(password)) {
+    throw new ValidationError('Password must contain at least one special character');
   }
 }
