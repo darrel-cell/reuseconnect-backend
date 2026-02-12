@@ -413,6 +413,19 @@ router.patch(
         } as ApiResponse);
       }
 
+      // Check if email is already in use by another user (if email is being changed)
+      if (email.trim() !== req.user.email) {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: email.trim() },
+        });
+        if (existingUser && existingUser.id !== req.user.userId) {
+          return res.status(400).json({
+            success: false,
+            error: 'This email address is already registered',
+          } as ApiResponse);
+        }
+      }
+
       // Find client by user email
       const client = await prisma.client.findFirst({
         where: {
@@ -428,11 +441,14 @@ router.patch(
         } as ApiResponse);
       }
 
-      // Update user name
+      // Update user name and email (both should be synchronized)
       const updatedUser = await prisma.user.update({
         where: { id: req.user.userId },
-        data: { name: name.trim() },
-        select: { name: true },
+        data: { 
+          name: name.trim(),
+          email: email.trim(),
+        },
+        select: { name: true, email: true },
       });
 
       // Update client profile

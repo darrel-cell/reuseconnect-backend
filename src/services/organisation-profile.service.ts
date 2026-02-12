@@ -67,7 +67,7 @@ export class OrganisationProfileService {
     // Verify user exists and is admin or reseller
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, role: true },
+      select: { id: true, role: true, email: true },
     });
 
     if (!user) {
@@ -78,10 +78,23 @@ export class OrganisationProfileService {
       throw new ValidationError('Organisation profile is only available for admin and reseller roles');
     }
 
-    // Update user name
+    // Check if email is already in use by another user (if email is being changed)
+    if (data.email.trim() !== user.email) {
+      const existingUser = await prisma.user.findUnique({
+        where: { email: data.email.trim() },
+      });
+      if (existingUser && existingUser.id !== userId) {
+        throw new ValidationError('This email address is already registered');
+      }
+    }
+
+    // Update user name and email (both should be synchronized)
     await prisma.user.update({
       where: { id: userId },
-      data: { name: data.name.trim() },
+      data: { 
+        name: data.name.trim(),
+        email: data.email.trim(),
+      },
     });
 
     // Upsert profile

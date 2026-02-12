@@ -211,13 +211,6 @@ export class BookingService {
 
     // Notify client of booking creation (pending approval)
     const { createNotification } = await import('../utils/notifications');
-    const { logger } = await import('../utils/logger');
-    logger.debug('Creating notification for user', {
-      userId: clientUserId,
-      tenantId: data.tenantId,
-      bookingId: booking.id,
-      bookingNumber: booking.bookingNumber,
-    });
     await createNotification(
       clientUserId,
       data.tenantId,
@@ -228,7 +221,6 @@ export class BookingService {
       booking.id,
       'booking'
     );
-    logger.debug('Notification created successfully');
 
     // If booking is linked to a reseller (and the reseller is not the creator),
     // notify the reseller that a new booking has been submitted for their client.
@@ -255,22 +247,85 @@ export class BookingService {
         status: 'active',
         // Remove tenantId filter - admins see all bookings across all tenants
       },
-      select: { id: true },
+      select: { id: true, email: true, name: true },
     });
     if (adminUsers.length > 0) {
       const { notifyPendingApproval } = await import('../utils/notifications');
-      logger.info('Notifying admins of pending approval', {
-        bookingId: booking.id,
-        bookingNumber: booking.bookingNumber,
-        adminCount: adminUsers.length,
-        adminIds: adminUsers.map(u => u.id),
-      });
       await notifyPendingApproval(
         booking.id,
         booking.bookingNumber,
         adminUsers.map(u => u.id),
         data.tenantId
       );
+
+      // Send email notifications to all admins about new booking
+      try {
+        const { emailService } = await import('../utils/email');
+        
+        // Check if email service is configured
+        if (!emailService.isConfigured()) {
+          logger.warn('Email service not configured, skipping booking created emails', {
+            bookingId: booking.id,
+            bookingNumber: booking.bookingNumber,
+          });
+        } else {
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: data.tenantId },
+            select: { name: true },
+          });
+
+          // Get the client's organisation name (company name) from the booking's client record
+          const clientRecord = await prisma.client.findUnique({
+            where: { id: booking.clientId },
+            select: { organisationName: true, name: true },
+          });
+          
+          // Use organisationName if available, otherwise fall back to client name, then data.clientName
+          const clientCompanyName = clientRecord?.organisationName || clientRecord?.name || data.clientName;
+
+          // Format site name with postcode: "Site Name (Postcode)"
+          const siteNameWithPostcode = data.postcode 
+            ? `${data.siteName} (${data.postcode})`
+            : data.siteName;
+
+
+          // Send email to each admin
+          const emailPromises = adminUsers
+            .filter(admin => admin.email) // Only send to admins with email
+            .map(admin =>
+              emailService.sendBookingCreatedEmail({
+                toEmail: admin.email!,
+                bookingNumber: booking.bookingNumber,
+                clientName: clientCompanyName,
+                siteName: siteNameWithPostcode,
+                scheduledDate: data.scheduledDate.toISOString(),
+                tenantName: tenant?.name || 'ITAD Platform',
+              }).catch((error) => {
+                // Log individual email failures but don't fail the whole operation
+                logger.warn('Failed to send booking created email to admin', {
+                  adminId: admin.id,
+                  adminEmail: admin.email,
+                  bookingId: booking.id,
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                });
+              })
+            );
+
+          // Send all emails in parallel (don't wait for all to complete)
+          Promise.all(emailPromises).catch((error) => {
+            logger.warn('Some booking created emails failed to send', {
+              bookingId: booking.id,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          });
+        }
+      } catch (error) {
+        // Log error but don't fail booking creation
+        logger.warn('Failed to send booking created emails', {
+          bookingId: booking.id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
       // Notifications sent successfully
     } else {
       // No admin users found to notify
@@ -665,18 +720,9 @@ export class BookingService {
     const jobService = new JobService();
     if (!booking.jobId) {
       // Create job if it doesn't exist (this will send notification to driver)
-      logger.info('Creating job from booking and assigning driver', {
-        bookingId: booking.id,
-        driverId,
-      });
       await jobService.createJobFromBooking(booking.id, driverId);
     } else {
       // Update existing job to 'routed' and assign driver
-      logger.info('Updating existing job and assigning driver', {
-        bookingId: booking.id,
-        jobId: booking.jobId,
-        driverId,
-      });
       const jobRepo = new JobRepository();
       const job = await jobRepo.findById(booking.jobId);
       if (job) {
@@ -712,13 +758,6 @@ export class BookingService {
             driverId: driverId,
           });
           // Notify driver of job assignment (status didn't change, so use assignment notification)
-          logger.info('Job status unchanged, sending assignment notification to driver', {
-            jobId: job.id,
-            jobNumber: job.erpJobNumber,
-            driverId,
-            tenantId: booking.tenantId,
-            currentStatus: job.status,
-          });
           const { notifyJobAssignment } = await import('../utils/notifications');
           await notifyJobAssignment(
             job.id,

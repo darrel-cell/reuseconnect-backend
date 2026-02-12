@@ -264,7 +264,7 @@ export class InviteService {
 
     const inviter = await prisma.user.findUnique({
       where: { id: invite.invitedBy },
-      select: { id: true, role: true, name: true },
+      select: { id: true, role: true, name: true, email: true },
     });
 
     // If role is 'client', create a Client record
@@ -288,6 +288,79 @@ export class InviteService {
         acceptedAt: new Date(),
       },
     });
+
+    // Send email notification to all admins and inviter about invitation acceptance
+    // If inviter is an admin, they will receive only one email (no duplicates)
+    try {
+      const { emailService } = await import('../utils/email');
+      const { logger } = await import('../utils/logger');
+      
+      // Get all active admin users
+      const adminUsers = await prisma.user.findMany({
+        where: {
+          role: 'admin',
+          status: 'active',
+        },
+        select: { id: true, email: true, name: true },
+      });
+
+      // Create a Set of unique email recipients (admins + inviter, deduplicated)
+      const recipientEmails = new Set<string>();
+      const recipients: Array<{ email: string; name: string }> = [];
+
+      // Add all admin emails
+      adminUsers.forEach(admin => {
+        if (admin.email) {
+          recipientEmails.add(admin.email);
+          recipients.push({ email: admin.email, name: admin.name });
+        }
+      });
+
+      // Add inviter email if they exist and have an email (will be deduplicated if they're an admin)
+      if (inviter && inviter.email) {
+        if (!recipientEmails.has(inviter.email)) {
+          recipientEmails.add(inviter.email);
+          recipients.push({ email: inviter.email, name: inviter.name });
+        }
+      }
+
+      // Send email to all unique recipients
+      if (recipients.length > 0) {
+        const emailPromises = recipients.map(recipient =>
+          emailService.sendInvitationAcceptedEmail({
+            toEmail: recipient.email,
+            inviterName: inviter?.name || 'System',
+            acceptedUserName: user.name,
+            acceptedUserEmail: user.email,
+            acceptedUserRole: invite.role as 'client' | 'reseller' | 'driver',
+            tenantName: user.tenant.name,
+          }).catch((error) => {
+            // Log individual email failures but don't fail the whole operation
+            logger.warn('Failed to send invitation accepted email to recipient', {
+              recipientEmail: recipient.email,
+              acceptedUserId: user.id,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          })
+        );
+
+        // Send all emails in parallel (don't wait for all to complete)
+        Promise.all(emailPromises).catch((error) => {
+          logger.warn('Some invitation accepted emails failed to send', {
+            acceptedUserId: user.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        });
+      }
+    } catch (error) {
+      // Log error but don't fail invitation acceptance
+      const { logger } = await import('../utils/logger');
+      logger.warn('Failed to send invitation accepted emails', {
+        inviterId: inviter?.id,
+        acceptedUserId: user.id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
 
     // Generate JWT token
     const token = generateToken({

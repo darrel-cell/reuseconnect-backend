@@ -40,7 +40,9 @@ const envSchema = z.object({
   // Email
   EMAILJS_ENABLED: z.string().default('true').transform(val => val !== 'false'),
   EMAILJS_SERVICE_ID: z.string().optional(),
-  EMAILJS_TEMPLATE_ID: z.string().optional(),
+  EMAILJS_TEMPLATE_ID: z.string().optional(), // Default template (for invitation emails)
+  EMAILJS_TEMPLATE_ID_INVITE_ACCEPTED: z.string().optional(), // Template for invitation accepted emails
+  EMAILJS_TEMPLATE_ID_BOOKING_CREATED: z.string().optional(), // Template for booking created emails
   EMAILJS_PUBLIC_KEY: z.string().optional(),
   EMAILJS_PRIVATE_KEY: z.string().optional(),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
@@ -128,7 +130,9 @@ export const validatedConfig = {
   email: {
     enabled: env.EMAILJS_ENABLED,
     serviceId: env.EMAILJS_SERVICE_ID,
-    templateId: env.EMAILJS_TEMPLATE_ID,
+    templateId: env.EMAILJS_TEMPLATE_ID, // Default template (for invitation emails)
+    templateIdInviteAccepted: env.EMAILJS_TEMPLATE_ID_INVITE_ACCEPTED, // Required for invitation accepted emails
+    templateIdBookingCreated: env.EMAILJS_TEMPLATE_ID_BOOKING_CREATED, // Required for booking created emails
     publicKey: env.EMAILJS_PUBLIC_KEY,
     privateKey: env.EMAILJS_PRIVATE_KEY,
     frontendUrl: env.FRONTEND_URL,

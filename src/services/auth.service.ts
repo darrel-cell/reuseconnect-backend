@@ -152,12 +152,6 @@ export class AuthService {
           const { notifyPendingUserApproval } = await import('../utils/notifications');
           const { logger } = await import('../utils/logger');
           
-          logger.info('Notifying admins of pending user approval', {
-            userId: user.id,
-            email: user.email,
-            role: userRole,
-            adminCount: adminUsers.length,
-          });
 
           // Notify all admins about pending user approval
           await notifyPendingUserApproval(

@@ -964,13 +964,6 @@ export class JobService {
       const { logger } = await import('../utils/logger');
       if (adminUsers.length > 0) {
         const { notifyJobStatusChange } = await import('../utils/notifications');
-        logger.info('Notifying admins of job status change', {
-          jobId: job.id,
-          jobNumber: job.erpJobNumber,
-          newStatus,
-          adminCount: adminUsers.length,
-          adminIds: adminUsers.map(a => a.id),
-        });
         // Notify each admin
         for (const admin of adminUsers) {
           await notifyJobStatusChange(
