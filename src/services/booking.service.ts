@@ -261,6 +261,7 @@ export class BookingService {
       // Send email notifications to all admins about new booking
       try {
         const { emailService } = await import('../utils/email');
+        const { logger } = await import('../utils/logger');
         
         // Check if email service is configured
         if (!emailService.isConfigured()) {
@@ -321,6 +322,7 @@ export class BookingService {
         }
       } catch (error) {
         // Log error but don't fail booking creation
+        const { logger } = await import('../utils/logger');
         logger.warn('Failed to send booking created emails', {
           bookingId: booking.id,
           error: error instanceof Error ? error.message : 'Unknown error',

@@ -150,8 +150,6 @@ export class AuthService {
 
         if (adminUsers.length > 0) {
           const { notifyPendingUserApproval } = await import('../utils/notifications');
-          const { logger } = await import('../utils/logger');
-          
 
           // Notify all admins about pending user approval
           await notifyPendingUserApproval(
