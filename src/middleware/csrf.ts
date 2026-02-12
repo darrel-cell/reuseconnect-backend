@@ -25,11 +25,15 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
   const publicEndpoints = [
     '/api/auth/login',
     '/api/auth/signup',
+    '/api/auth/verify-2fa',
+    '/api/auth/resend-2fa',
     '/api/invites/token',
     '/api/invites/accept',
     '/health',
     '/auth/login',      // Relative path when mounted at /api/
     '/auth/signup',     // Relative path when mounted at /api/
+    '/auth/verify-2fa',  // Relative path when mounted at /api/
+    '/auth/resend-2fa',  // Relative path when mounted at /api/
     '/invites/token',   // Relative path when mounted at /api/
     '/invites/accept',  // Relative path when mounted at /api/
   ];

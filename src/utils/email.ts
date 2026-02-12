@@ -29,6 +29,13 @@ interface SendBookingCreatedEmailParams {
   tenantName: string;
 }
 
+interface SendTwoFactorCodeParams {
+  toEmail: string;
+  userName: string;
+  code: string;
+  tenantName: string;
+}
+
 interface EmailConfig {
   serviceId: string;
   templateId: string;
@@ -354,6 +361,68 @@ class EmailService {
         templateId: config.email.templateIdBookingCreated,
       });
       // Don't throw error - booking creation should still succeed
+    }
+  }
+
+  /**
+   * Send 2FA verification code email
+   */
+  async sendTwoFactorCode(params: SendTwoFactorCodeParams): Promise<void> {
+    if (!this.emailConfig) {
+      // EmailJS not configured, skipping email send
+      return;
+    }
+
+    // Check if specific template ID is configured
+    if (!config.email.templateIdTwoFactor) {
+      // Template ID not set, skipping email send
+      return;
+    }
+
+    try {
+      const {
+        toEmail,
+        userName,
+        code,
+        tenantName,
+      } = params;
+
+      // Build dashboard URL
+      const dashboardUrl = `${config.email.frontendUrl}/dashboard`;
+
+      // Prepare template parameters
+      const templateParams = {
+        to_email: toEmail,
+        to_name: userName,
+        verification_code: code,
+        dashboard_url: dashboardUrl,
+        app_name: tenantName,
+      };
+
+      // Pass publicKey (and privateKey if available) in options
+      const sendOptions: { publicKey: string; privateKey?: string } = {
+        publicKey: this.emailConfig.publicKey.trim(),
+      };
+      
+      if (config.email.privateKey && config.email.privateKey.trim() !== '') {
+        sendOptions.privateKey = config.email.privateKey.trim();
+      }
+      
+      await emailjs.send(
+        this.emailConfig.serviceId,
+        config.email.templateIdTwoFactor,
+        templateParams,
+        sendOptions
+      );
+
+    } catch (error) {
+      console.error('[Email Service] Failed to send 2FA verification code email:', error);
+      console.error('[Email Service] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        errorType: error?.constructor?.name,
+      });
+      // Don't throw error - code is still generated and stored
     }
   }
 

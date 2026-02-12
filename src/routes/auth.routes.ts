@@ -35,6 +35,23 @@ router.post(
   authController.signup.bind(authController)
 );
 
+router.post(
+  '/verify-2fa',
+  validate([
+    body('userId').notEmpty().withMessage('User ID is required'),
+    body('code').matches(/^\d{6}$/).withMessage('Verification code must be 6 digits'),
+  ]),
+  authController.verifyTwoFactor.bind(authController)
+);
+
+router.post(
+  '/resend-2fa',
+  validate([
+    body('userId').notEmpty().withMessage('User ID is required'),
+  ]),
+  authController.resendTwoFactorCode.bind(authController)
+);
+
 // Get current user endpoint
 // Returns user if authenticated, null if not authenticated (to avoid 401 console errors)
 router.get(

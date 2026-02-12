@@ -51,6 +51,62 @@ export class AuthController {
 
       const result = await authService.login(email, password);
 
+      // Check if 2FA is required
+      if (result.requiresTwoFactor) {
+        return res.json({
+          success: true,
+          data: {
+            requiresTwoFactor: true,
+            userId: result.userId,
+            email: result.email,
+            message: result.message,
+          },
+        } as ApiResponse);
+      }
+
+      // No 2FA required - proceed with normal login
+      // Set httpOnly cookie with token (secure)
+      setAuthCookie(res, result.token!);
+
+      // Generate and return CSRF token for subsequent requests
+      const csrfToken = generateCsrfToken(req, res);
+
+      // Return user and tenant data (but NOT the token in response body)
+      return res.json({
+        success: true,
+        data: {
+          user: result.user,
+          tenant: result.tenant,
+          csrfToken: csrfToken, // Include CSRF token in response
+          // Token is now in httpOnly cookie, not in response
+        },
+      } as ApiResponse);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async verifyTwoFactor(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId, code } = req.body;
+
+      if (!userId || !code) {
+        return res.status(400).json({
+          success: false,
+          error: 'User ID and verification code are required',
+        } as ApiResponse);
+      }
+
+      // Validate code format (6 digits)
+      if (!/^\d{6}$/.test(code)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Verification code must be 6 digits',
+        } as ApiResponse);
+      }
+
+      const result = await authService.verifyTwoFactor(userId, code);
+
       // Set httpOnly cookie with token (secure)
       setAuthCookie(res, result.token);
 
@@ -65,6 +121,37 @@ export class AuthController {
           tenant: result.tenant,
           csrfToken: csrfToken, // Include CSRF token in response
           // Token is now in httpOnly cookie, not in response
+        },
+      } as ApiResponse);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async resendTwoFactorCode(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'User ID is required',
+        } as ApiResponse);
+      }
+
+      const result = await authService.resendTwoFactorCode(userId);
+
+      if (!result.canResend) {
+        return res.status(429).json({
+          success: false,
+          error: result.message || 'Please wait before requesting a new code',
+        } as ApiResponse);
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          message: 'A new verification code has been sent to your email address.',
         },
       } as ApiResponse);
     } catch (error) {

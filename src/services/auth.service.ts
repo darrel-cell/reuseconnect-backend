@@ -35,6 +35,113 @@ export class AuthService {
       throw new UnauthorizedError('Account is not active. Please contact support.');
     }
 
+    // Check if 2FA is required (admin users, except admin@reuse.com)
+    const requiresTwoFactor = user.role === 'admin' && user.email.toLowerCase() !== 'admin@reuse.com';
+
+    if (requiresTwoFactor) {
+      // Send 2FA verification code
+      const { TwoFactorService } = await import('./two-factor.service');
+      const twoFactorService = new TwoFactorService();
+      
+      await twoFactorService.sendVerificationCode(
+        user.id,
+        user.email,
+        user.name,
+        user.tenant.name
+      );
+
+      // Return response indicating 2FA is required
+      return {
+        requiresTwoFactor: true,
+        userId: user.id,
+        email: user.email,
+        message: 'A verification code has been sent to your email address. Please enter it to complete login.',
+      };
+    }
+
+    // No 2FA required - proceed with normal login
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role as UserRole,
+      tenantId: user.tenantId,
+    });
+
+    return {
+      requiresTwoFactor: false,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        status: user.status,
+        tenantId: user.tenantId,
+        tenantName: user.tenant.name,
+        avatar: user.avatar,
+        createdAt: user.createdAt.toISOString(),
+      },
+      tenant: {
+        id: user.tenant.id,
+        name: user.tenant.name,
+        slug: user.tenant.slug,
+        logo: user.tenant.logo,
+        favicon: user.tenant.favicon,
+        primaryColor: user.tenant.primaryColor,
+        accentColor: user.tenant.accentColor,
+        theme: user.tenant.theme,
+        createdAt: user.tenant.createdAt.toISOString(),
+      },
+      token,
+    };
+  }
+
+  /**
+   * Resend 2FA verification code
+   */
+  async resendTwoFactorCode(userId: string) {
+    const user = await userRepo.findById(userId);
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    // Check if user is admin (2FA only applies to admins)
+    if (user.role !== 'admin') {
+      throw new UnauthorizedError('Two-factor authentication is only required for administrators');
+    }
+
+    // Resend verification code
+    const { TwoFactorService } = await import('./two-factor.service');
+    const twoFactorService = new TwoFactorService();
+    
+    const result = await twoFactorService.resendVerificationCode(
+      user.id,
+      user.email,
+      user.name,
+      user.tenant.name
+    );
+
+    return result;
+  }
+
+  /**
+   * Verify 2FA code and complete login
+   */
+  async verifyTwoFactor(userId: string, code: string) {
+    const user = await userRepo.findById(userId);
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    // Verify the code
+    const { TwoFactorService } = await import('./two-factor.service');
+    const twoFactorService = new TwoFactorService();
+    
+    const isValid = await twoFactorService.verifyCode(userId, code);
+    if (!isValid) {
+      throw new UnauthorizedError('Invalid or expired verification code');
+    }
+
+    // Generate token and return user data
     const token = generateToken({
       userId: user.id,
       email: user.email,

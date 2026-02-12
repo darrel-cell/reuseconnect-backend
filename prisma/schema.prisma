@@ -10,29 +10,30 @@ datasource db {
 
 // Users and Authentication
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
+  id        String     @id @default(uuid())
+  email     String     @unique
   name      String
-  password  String   // Hashed password
+  password  String // Hashed password
   role      UserRole
   status    UserStatus @default(pending)
   tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
   avatar    String?
-  phone     String?  // Phone number for drivers
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  phone     String? // Phone number for drivers
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
   // Relations
-  bookingsCreated Booking[] @relation("CreatedBy")
-  bookingsScheduled Booking[] @relation("ScheduledBy")
-  jobsAssigned    Job[]
-  evidence        Evidence[]
-  documents       Document[]
-  invitesSent     Invite[] @relation("InvitedBy")
-  driverProfile   DriverProfile?
+  bookingsCreated     Booking[]            @relation("CreatedBy")
+  bookingsScheduled   Booking[]            @relation("ScheduledBy")
+  jobsAssigned        Job[]
+  evidence            Evidence[]
+  documents           Document[]
+  invitesSent         Invite[]             @relation("InvitedBy")
+  driverProfile       DriverProfile?
   organisationProfile OrganisationProfile?
-  notifications   Notification[] @relation("UserNotifications")
+  notifications       Notification[]       @relation("UserNotifications")
+  twoFactorCodes      TwoFactorCode[]      @relation("TwoFactorCodes")
 
   @@index([email])
   @@index([tenantId])
@@ -67,37 +68,37 @@ model Tenant {
   updatedAt    DateTime @updatedAt
 
   // Relations
-  users       User[]
-  clients     Client[]
-  bookings    Booking[]
-  jobs        Job[]
-  sites       Site[]
+  users         User[]
+  clients       Client[]
+  bookings      Booking[]
+  jobs          Job[]
+  sites         Site[]
   notifications Notification[]
-  documents   Document[]
+  documents     Document[]
 
   @@index([slug])
 }
 
 // Clients (for reseller relationship)
 model Client {
-  id                String   @id @default(uuid())
-  tenantId          String
-  tenant            Tenant   @relation(fields: [tenantId], references: [id])
-  name              String
-  email             String?
-  phone             String?
-  organisationName  String?  // Organisation/company name
+  id                 String       @id @default(uuid())
+  tenantId           String
+  tenant             Tenant       @relation(fields: [tenantId], references: [id])
+  name               String
+  email              String?
+  phone              String?
+  organisationName   String? // Organisation/company name
   registrationNumber String? // Company registration number
-  address           String?  // Registered address
-  status            ClientStatus @default(active)
-  resellerId        String?  // If client belongs to a reseller
-  resellerName      String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  address            String? // Registered address
+  status             ClientStatus @default(active)
+  resellerId         String? // If client belongs to a reseller
+  resellerName       String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   // Relations
-  bookings   Booking[]
-  sites      Site[]
+  bookings Booking[]
+  sites    Site[]
 
   @@index([tenantId])
   @@index([resellerId])
@@ -111,23 +112,23 @@ enum ClientStatus {
 
 // Sites (Collection locations)
 model Site {
-  id          String   @id @default(uuid())
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id])
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  name        String
-  address     String
-  postcode    String
-  lat         Float?
-  lng         Float?
-  contactName String?
+  id           String   @id @default(uuid())
+  clientId     String
+  client       Client   @relation(fields: [clientId], references: [id])
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  name         String
+  address      String
+  postcode     String
+  lat          Float?
+  lng          Float?
+  contactName  String?
   contactPhone String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Relations
-  bookings    Booking[]
+  bookings Booking[]
 
   @@index([clientId])
   @@index([tenantId])
@@ -135,73 +136,73 @@ model Site {
 
 // Asset Categories (Global - shared by all tenants)
 model AssetCategory {
-  id             String   @id @default(uuid())
-  name           String   @unique // Global categories - names must be unique
-  icon           String?
-  co2ePerUnit    Float    // kg CO2e saved per unit reused
-  avgWeight      Float    // kg
-  avgBuybackValue Float   // £ Base buyback (RRP × residual %)
-  
+  id              String  @id @default(uuid())
+  name            String  @unique // Global categories - names must be unique
+  icon            String?
+  co2ePerUnit     Float // kg CO2e saved per unit reused
+  avgWeight       Float // kg
+  avgBuybackValue Float // £ Base buyback (RRP × residual %)
+
   // Buyback calculation parameters
-  avgRRP         Float?   // Average Retail Price (£)
-  residualLow    Float?   // Residual percentage (e.g., 0.15 = 15%)
-  buybackFloor   Float?   // Minimum buyback value (£)
-  buybackCap     Float?   // Maximum buyback value (£)
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  avgRRP       Float? // Average Retail Price (£)
+  residualLow  Float? // Residual percentage (e.g., 0.15 = 15%)
+  buybackFloor Float? // Minimum buyback value (£)
+  buybackCap   Float? // Maximum buyback value (£)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  bookingAssets  BookingAsset[]
-  jobAssets      JobAsset[]
+  bookingAssets BookingAsset[]
+  jobAssets     JobAsset[]
 }
 
 // Bookings (Initial booking request)
 model Booking {
-  id                String   @id @default(uuid())
-  bookingNumber     String   @unique
-  clientId          String
-  client            Client   @relation(fields: [clientId], references: [id])
-  tenantId          String
-  tenant            Tenant   @relation(fields: [tenantId], references: [id])
-  siteId            String?
-  site              Site?    @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  siteName          String
-  siteAddress       String
-  postcode          String
-  lat               Float?
-  lng               Float?
-  scheduledDate     DateTime
-  status            BookingStatus @default(pending)
-  charityPercent    Int      @default(0)
-  estimatedCO2e     Float
-  estimatedBuyback  Float
-  preferredVehicleType String? // petrol, diesel, electric
-  roundTripDistanceKm Float?
+  id                     String        @id @default(uuid())
+  bookingNumber          String        @unique
+  clientId               String
+  client                 Client        @relation(fields: [clientId], references: [id])
+  tenantId               String
+  tenant                 Tenant        @relation(fields: [tenantId], references: [id])
+  siteId                 String?
+  site                   Site?         @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  siteName               String
+  siteAddress            String
+  postcode               String
+  lat                    Float?
+  lng                    Float?
+  scheduledDate          DateTime
+  status                 BookingStatus @default(pending)
+  charityPercent         Int           @default(0)
+  estimatedCO2e          Float
+  estimatedBuyback       Float
+  preferredVehicleType   String? // petrol, diesel, electric
+  roundTripDistanceKm    Float?
   roundTripDistanceMiles Float?
-  erpJobNumber      String?  // From Mock ERP
-  jobId             String?  @unique // Link to Job when driver assigned
-  job               Job?      @relation("BookingJob")
-  resellerId        String?
-  resellerName      String?
-  createdBy         String
-  creator           User     @relation("CreatedBy", fields: [createdBy], references: [id])
-  scheduledBy       String?
-  scheduler         User?    @relation("ScheduledBy", fields: [scheduledBy], references: [id])
-  driverId          String?
-  driverName        String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  scheduledAt       DateTime?
-  collectedAt       DateTime?
-  sanitisedAt       DateTime?
-  gradedAt          DateTime?
-  completedAt       DateTime?
+  erpJobNumber           String? // From Mock ERP
+  jobId                  String?       @unique // Link to Job when driver assigned
+  job                    Job?          @relation("BookingJob")
+  resellerId             String?
+  resellerName           String?
+  createdBy              String
+  creator                User          @relation("CreatedBy", fields: [createdBy], references: [id])
+  scheduledBy            String?
+  scheduler              User?         @relation("ScheduledBy", fields: [scheduledBy], references: [id])
+  driverId               String?
+  driverName             String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  scheduledAt            DateTime?
+  collectedAt            DateTime?
+  sanitisedAt            DateTime?
+  gradedAt               DateTime?
+  completedAt            DateTime?
 
   // Relations
-  assets            BookingAsset[]
-  statusHistory     BookingStatusHistory[]
-  documents         Document[] @relation("BookingDocuments")
+  assets        BookingAsset[]
+  statusHistory BookingStatusHistory[]
+  documents     Document[]             @relation("BookingDocuments")
 
   @@index([clientId])
   @@index([tenantId])
@@ -226,14 +227,14 @@ enum BookingStatus {
 
 // Booking Assets
 model BookingAsset {
-  id          String   @id @default(uuid())
-  bookingId  String
-  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  categoryId String
-  category   AssetCategory @relation(fields: [categoryId], references: [id])
+  id           String        @id @default(uuid())
+  bookingId    String
+  booking      Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  categoryId   String
+  category     AssetCategory @relation(fields: [categoryId], references: [id])
   categoryName String
-  quantity   Int
-  createdAt  DateTime @default(now())
+  quantity     Int
+  createdAt    DateTime      @default(now())
 
   @@index([bookingId])
   @@index([categoryId])
@@ -241,13 +242,13 @@ model BookingAsset {
 
 // Booking Status History
 model BookingStatusHistory {
-  id          String   @id @default(uuid())
-  bookingId   String
-  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  status      BookingStatus
-  changedBy   String?
-  notes       String?
-  createdAt   DateTime @default(now())
+  id        String        @id @default(uuid())
+  bookingId String
+  booking   Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  status    BookingStatus
+  changedBy String?
+  notes     String?
+  createdAt DateTime      @default(now())
 
   @@index([bookingId])
   @@index([createdAt])
@@ -255,46 +256,46 @@ model BookingStatusHistory {
 
 // Jobs (Workflow execution)
 model Job {
-  id              String   @id @default(uuid())
-  erpJobNumber    String   @unique
-  bookingId       String?  @unique
-  booking         Booking? @relation("BookingJob", fields: [bookingId], references: [id])
-  tenantId        String
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
-  clientName      String
-  siteName        String
-  siteAddress     String
-  status          JobStatus @default(booked)
-  scheduledDate   DateTime
-  completedDate   DateTime?
-  estimatedArrival DateTime? // ETA calculated when driver starts (en_route status)
-  co2eSaved       Float    @default(0)
-  travelEmissions Float   @default(0)
-  buybackValue    Float   @default(0)
-  charityPercent  Int      @default(0)
-  driverId        String?
-  driver          User?    @relation(fields: [driverId], references: [id])
+  id                         String    @id @default(uuid())
+  erpJobNumber               String    @unique
+  bookingId                  String?   @unique
+  booking                    Booking?  @relation("BookingJob", fields: [bookingId], references: [id])
+  tenantId                   String
+  tenant                     Tenant    @relation(fields: [tenantId], references: [id])
+  clientName                 String
+  siteName                   String
+  siteAddress                String
+  status                     JobStatus @default(booked)
+  scheduledDate              DateTime
+  completedDate              DateTime?
+  estimatedArrival           DateTime? // ETA calculated when driver starts (en_route status)
+  co2eSaved                  Float     @default(0)
+  travelEmissions            Float     @default(0)
+  buybackValue               Float     @default(0)
+  charityPercent             Int       @default(0)
+  driverId                   String?
+  driver                     User?     @relation(fields: [driverId], references: [id])
   // Driver journey fields (entered before starting journey in routed status)
-  dial2Collection String?  // DIAL 2 Collection: 1 Person, 2 or more persons, etc.
-  securityRequirements String?  // Security badge required at reception, etc.
-  idRequired      String?  // Yes - Photo ID required, etc.
-  loadingBayLocation String?  // Loading bay 3, rear entrance, etc.
-  vehicleHeightRestrictions String?  // Maximum height 3.5m, etc.
-  doorLiftSize    String?  // Standard loading bay doors, lift available, etc.
-  roadWorksPublicEvents String?  // None reported, etc.
-  manualHandlingRequirements String?  // Heavy items require two-person lift, etc.
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  dial2Collection            String? // DIAL 2 Collection: 1 Person, 2 or more persons, etc.
+  securityRequirements       String? // Security badge required at reception, etc.
+  idRequired                 String? // Yes - Photo ID required, etc.
+  loadingBayLocation         String? // Loading bay 3, rear entrance, etc.
+  vehicleHeightRestrictions  String? // Maximum height 3.5m, etc.
+  doorLiftSize               String? // Standard loading bay doors, lift available, etc.
+  roadWorksPublicEvents      String? // None reported, etc.
+  manualHandlingRequirements String? // Heavy items require two-person lift, etc.
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   // Relations
-  assets          JobAsset[]
-  statusHistory   JobStatusHistory[]
-  evidence        Evidence[] // Multiple evidence records (one per status)
-  certificates    Certificate[]
-  co2Results      CO2Result[]
-  buybackResults  BuybackResult[]
-  financeStatus   FinanceStatus?
-  documents       Document[]
+  assets         JobAsset[]
+  statusHistory  JobStatusHistory[]
+  evidence       Evidence[] // Multiple evidence records (one per status)
+  certificates   Certificate[]
+  co2Results     CO2Result[]
+  buybackResults BuybackResult[]
+  financeStatus  FinanceStatus?
+  documents      Document[]
 
   @@index([bookingId])
   @@index([tenantId])
@@ -322,23 +323,23 @@ enum JobStatus {
 
 // Job Assets
 model JobAsset {
-  id                  String   @id @default(uuid())
-  jobId               String
-  job                 Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  categoryId          String
-  category            AssetCategory @relation(fields: [categoryId], references: [id])
-  categoryName        String
-  quantity            Int
-  serialNumbers       String[] @default([])
-  grade               String?  // A, B, C, D, Recycled
-  weight              Float?
-  sanitised           Boolean  @default(false)
-  wipeMethod          String?
+  id                   String        @id @default(uuid())
+  jobId                String
+  job                  Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  categoryId           String
+  category             AssetCategory @relation(fields: [categoryId], references: [id])
+  categoryName         String
+  quantity             Int
+  serialNumbers        String[]      @default([])
+  grade                String? // A, B, C, D, Recycled
+  weight               Float?
+  sanitised            Boolean       @default(false)
+  wipeMethod           String?
   sanitisationRecordId String?
-  gradingRecordId     String?
-  resaleValue         Float?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  gradingRecordId      String?
+  resaleValue          Float?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   @@index([jobId])
   @@index([categoryId])
@@ -346,13 +347,13 @@ model JobAsset {
 
 // Job Status History
 model JobStatusHistory {
-  id          String   @id @default(uuid())
-  jobId       String
-  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  status      JobStatus
-  changedBy   String?
-  notes       String?
-  createdAt   DateTime @default(now())
+  id        String    @id @default(uuid())
+  jobId     String
+  job       Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status    JobStatus
+  changedBy String?
+  notes     String?
+  createdAt DateTime  @default(now())
 
   @@index([jobId])
   @@index([createdAt])
@@ -363,10 +364,10 @@ model DriverProfile {
   id              String   @id @default(uuid())
   userId          String   @unique
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vehicleReg      String   // Vehicle registration number
-  vehicleType     String   // 'van' | 'truck' | 'car'
-  vehicleFuelType String   // 'petrol' | 'diesel' | 'electric'
-  phone           String?  // Driver phone number
+  vehicleReg      String // Vehicle registration number
+  vehicleType     String // 'van' | 'truck' | 'car'
+  vehicleFuelType String // 'petrol' | 'diesel' | 'electric'
+  phone           String? // Driver phone number
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -375,16 +376,16 @@ model DriverProfile {
 
 // Organisation Profile (for resellers and admins)
 model OrganisationProfile {
-  id                String   @id @default(uuid())
-  userId            String   @unique
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organisationName  String
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisationName   String
   registrationNumber String
-  address           String
-  email             String
-  phone             String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  address            String
+  email              String
+  phone              String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@index([userId])
 }
@@ -398,10 +399,10 @@ model Evidence {
   jobId       String
   job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
   status      JobStatus // Status for which this evidence was submitted
-  uploadedBy  String?   // Nullable to preserve evidence when driver is deleted
-  uploader    User?      @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+  uploadedBy  String? // Nullable to preserve evidence when driver is deleted
+  uploader    User?     @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
   photos      String[]  @default([]) // File paths/URLs
-  signature   String?   // File path/URL
+  signature   String? // File path/URL
   sealNumbers String[]  @default([])
   notes       String?
   createdAt   DateTime  @default(now())
@@ -415,14 +416,14 @@ model Evidence {
 
 // Certificates
 model Certificate {
-  id            String   @id @default(uuid())
+  id            String          @id @default(uuid())
   jobId         String
-  job           Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job           Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
   type          CertificateType
-  generatedDate DateTime @default(now())
+  generatedDate DateTime        @default(now())
   downloadUrl   String
-  externalUrl   String?  // For Blancco certificates
-  createdAt     DateTime @default(now())
+  externalUrl   String? // For Blancco certificates
+  createdAt     DateTime        @default(now())
 
   @@index([jobId])
   @@index([type])
@@ -438,24 +439,24 @@ enum CertificateType {
 
 // CO2 Results
 model CO2Result {
-  id              String   @id @default(uuid())
-  jobId           String   @unique
-  job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  reuseSavings    Float    // kg CO2e
-  travelEmissions Float    // kg CO2e
-  netImpact       Float    // kg CO2e
-  distanceKm      Float
-  distanceMiles   Float
+  id                       String   @id @default(uuid())
+  jobId                    String   @unique
+  job                      Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  reuseSavings             Float // kg CO2e
+  travelEmissions          Float // kg CO2e
+  netImpact                Float // kg CO2e
+  distanceKm               Float
+  distanceMiles            Float
   vehicleEmissionsPetrol   Float
   vehicleEmissionsDiesel   Float
-  vehicleEmissionsElectric  Float
-  treesPlanted    Int
-  householdDays   Int
-  carMiles        Int
-  flightHours     Int
-  calculationType String   @default("pre_job") // pre_job or post_job
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  vehicleEmissionsElectric Float
+  treesPlanted             Int
+  householdDays            Int
+  carMiles                 Int
+  flightHours              Int
+  calculationType          String   @default("pre_job") // pre_job or post_job
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   @@index([jobId])
 }
@@ -467,7 +468,7 @@ model BuybackResult {
   job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   estimatedValue  Float
   finalValue      Float?
-  erpValue        Float?   // From ERP
+  erpValue        Float? // From ERP
   calculationType String   @default("pre_job") // pre_job or post_job
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -478,52 +479,52 @@ model BuybackResult {
 // Buyback Configuration (Global settings for buyback calculation)
 model BuybackConfig {
   id              String   @id @default("singleton")
-  volumeFactor10  Float    @default(1.03)  // For 10-49 items
-  volumeFactor50  Float    @default(1.06)  // For 50-199 items
-  volumeFactor200 Float    @default(1.10)  // For 200+ items
-  ageFactor       Float    @default(1.0)   // Fixed at 3 years
-  conditionFactor Float    @default(1.0)   // Fixed at Grade B
-  marketFactor    Float    @default(1.0)   // Default market index
+  volumeFactor10  Float    @default(1.03) // For 10-49 items
+  volumeFactor50  Float    @default(1.06) // For 50-199 items
+  volumeFactor200 Float    @default(1.10) // For 200+ items
+  ageFactor       Float    @default(1.0) // Fixed at 3 years
+  conditionFactor Float    @default(1.0) // Fixed at Grade B
+  marketFactor    Float    @default(1.0) // Default market index
   updatedAt       DateTime @updatedAt
 }
 
 // Finance Status (ERP-owned, we just track)
 model FinanceStatus {
-  id              String   @id @default(uuid())
-  jobId           String   @unique
-  job             Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  estimatedCost   Float?
+  id               String   @id @default(uuid())
+  jobId            String   @unique
+  job              Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  estimatedCost    Float?
   estimatedBuyback Float?
-  finalCost       Float?
-  finalBuyback    Float?
-  erpInvoiceRef   String?
-  erpInvoiceUrl   String?
-  status          String   @default("pending") // pending, invoiced, paid
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  finalCost        Float?
+  finalBuyback     Float?
+  erpInvoiceRef    String?
+  erpInvoiceUrl    String?
+  status           String   @default("pending") // pending, invoiced, paid
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([jobId])
 }
 
 // Documents (Manual PDF uploads)
 model Document {
-  id          String   @id @default(uuid())
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  jobId       String?
-  job         Job?     @relation(fields: [jobId], references: [id])
-  bookingId   String?
-  booking     Booking? @relation("BookingDocuments", fields: [bookingId], references: [id])
-  name        String
-  type        String   // invoice, certificate, report, etc.
-  filePath    String
-  fileSize    Int
-  mimeType    String
-  uploadedBy  String?  // Nullable to preserve documents when user is deleted
-  uploader    User?     @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
-  metadata    String?  // JSON metadata
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  jobId      String?
+  job        Job?     @relation(fields: [jobId], references: [id])
+  bookingId  String?
+  booking    Booking? @relation("BookingDocuments", fields: [bookingId], references: [id])
+  name       String
+  type       String // invoice, certificate, report, etc.
+  filePath   String
+  fileSize   Int
+  mimeType   String
+  uploadedBy String? // Nullable to preserve documents when user is deleted
+  uploader   User?    @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+  metadata   String? // JSON metadata
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([tenantId])
   @@index([jobId])
@@ -532,17 +533,17 @@ model Document {
 
 // Invites
 model Invite {
-  id          String   @id @default(uuid())
-  email       String
-  role        UserRole
-  tenantId    String
-  tenantName  String
-  invitedBy   String
-  inviter     User     @relation("InvitedBy", fields: [invitedBy], references: [id])
-  invitedAt   DateTime @default(now())
-  expiresAt   DateTime
-  acceptedAt  DateTime?
-  token       String   @unique
+  id         String    @id @default(uuid())
+  email      String
+  role       UserRole
+  tenantId   String
+  tenantName String
+  invitedBy  String
+  inviter    User      @relation("InvitedBy", fields: [invitedBy], references: [id])
+  invitedAt  DateTime  @default(now())
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  token      String    @unique
 
   @@index([email])
   @@index([token])
@@ -551,19 +552,19 @@ model Invite {
 
 // Notifications
 model Notification {
-  id          String   @id @default(uuid())
+  id          String           @id @default(uuid())
   userId      String
-  user        User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  user        User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
   tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   type        NotificationType
   title       String
   message     String
-  read        Boolean  @default(false)
-  url         String?  // Optional URL to navigate to when clicked
-  relatedId   String?  // ID of related entity (jobId, bookingId, etc.)
-  relatedType String?  // Type of related entity (job, booking, etc.)
-  createdAt   DateTime @default(now())
+  read        Boolean          @default(false)
+  url         String? // Optional URL to navigate to when clicked
+  relatedId   String? // ID of related entity (jobId, bookingId, etc.)
+  relatedType String? // Type of related entity (job, booking, etc.)
+  createdAt   DateTime         @default(now())
   readAt      DateTime?
 
   @@index([userId])
@@ -578,4 +579,21 @@ enum NotificationType {
   warning
   info
   error
+}
+
+// Two-Factor Authentication Codes
+model TwoFactorCode {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation("TwoFactorCodes", fields: [userId], references: [id], onDelete: Cascade)
+  code      String // 6-digit verification code
+  email     String // Email address the code was sent to
+  expiresAt DateTime // Code expiration time (typically 10 minutes)
+  used      Boolean  @default(false) // Whether the code has been used
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([code])
+  @@index([expiresAt])
+  @@index([userId, used])
 }
